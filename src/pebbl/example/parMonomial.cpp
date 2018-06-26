@@ -178,6 +178,8 @@ namespace pebblMonom {
 		      MPI_INT,
 		      0,
 		      uMPI::boundComm);
+      if (probSize == -1)
+        return;
       UnPackBuffer inBuf(probSize);          // Create a big enough
       inBuf.reset(probSize);                 // temporary buffer.
       uMPI::broadcast((void *) inBuf.buf(),  // Get the data...

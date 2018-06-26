@@ -1598,7 +1598,7 @@ template <class B,class PB> int driver(int argc, char** argv)
         {
           (&instance)->doBoundWork();
         } 
-      if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
+      else if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
 	{
 	  CommonIO::begin();
 	  CommonIO::setIOFlush(1);
@@ -1612,7 +1612,8 @@ template <class B,class PB> int driver(int argc, char** argv)
 	      instance.printConfiguration();
 	      instance.solve();
 	    }
-
+          int endSig = -1;
+	  uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
 	  CommonIO::end();
 	}
       else 

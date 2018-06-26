@@ -1592,14 +1592,15 @@ template <class B,class PB> int driver(int argc, char** argv)
       int boundingGroupSize = parallel_bounding_test(argc, argv);
       uMPI::init(&argc,&argv,MPI_COMM_WORLD, boundingGroupSize);
       int nprocessors = uMPI::size;
-      PB instance;
       
       if (!uMPI::isHead)
         {
+          PB instance;
           (&instance)->doBoundWork();
         } 
       else if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
 	{
+          PB instance;
 	  CommonIO::begin();
 	  CommonIO::setIOFlush(1);
 

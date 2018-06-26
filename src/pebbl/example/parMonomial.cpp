@@ -169,6 +169,42 @@ namespace pebblMonom {
       return new ofstream(name,ios::out);
   }
 
+  void parMaxMonomialData::doBoundWork() {
+     while (true) {
+      double param = -1;
+      int probSize;                          // Get length of buffer
+      uMPI::broadcast(&probSize,             // we're going to get.
+		      1,
+		      MPI_INT,
+		      0,
+		      uMPI::boundComm);
+      UnPackBuffer inBuf(probSize);          // Create a big enough
+      inBuf.reset(probSize);                 // temporary buffer.
+      uMPI::broadcast((void *) inBuf.buf(),  // Get the data...
+		      probSize,
+		      MPI_PACKED,
+		      0,
+		      uMPI::boundComm);
+      unpack(inBuf);                      // ... and unpack it.
+      parMaxMonomSubThreeWay *subProblem = new parMaxMonomSubThreeWay();
+      subProblem->setGlobalInfo(this);
+      subProblem->setMPGlobal(this);
+      uMPI::broadcast(&probSize,             // we're going to get.
+		      1,
+		      MPI_INT,
+		      0,
+		      uMPI::boundComm);
+      UnPackBuffer inBuf2(probSize);          // Create a big enough
+      inBuf.reset(probSize);                 // temporary buffer.
+      uMPI::broadcast((void *) inBuf2.buf(),  // Get the data...
+		      probSize,
+		      MPI_PACKED,
+		      0,
+		      uMPI::boundComm);
+      subProblem->unpackProblem(inBuf2);                      // ... and unpack it.
+      subProblem->parBoundComputation(&param);
+     }
+  }
 
   ////////////// parMaxMonomSubThreeWay /////////
 
@@ -368,6 +404,154 @@ namespace pebblMonom {
     return temp;
   };
 
+  void parMaxMonomSubThreeWay::parBoundComputation(double* controlParam) 
+  {
+    if (uMPI::boundSize == 1) {
+      maxMonomSubThreeWay::boundComputation(controlParam);
+      return;
+    }
+
+  if(uMPI::isHead)                  
+    {
+      PackBuffer outBuf(8192);             // Pack everything into a buffer.
+      pGlobal()->pack(outBuf);
+      int probSize = outBuf.size();        // Figure out length.
+      DEBUGPR(70,ucout << "Broadcast size is " << probSize << " bytes.\n");
+      uMPI::broadcast(&probSize,          // Broadcast length.
+		      1,
+		      MPI_INT,
+		      0,
+		      uMPI::boundComm);
+      uMPI::broadcast((void*) outBuf.buf(), // Now broadcast buffer itself.
+		      probSize,
+		      MPI_PACKED,
+		      0,
+		      uMPI::boundComm);
+      PackBuffer subPBuf(8192);
+      packProblem(subPBuf);
+      int subProbSize = subPBuf.size();        // Figure out length.
+      uMPI::broadcast(&subProbSize,          // Broadcast length.
+		      1,
+		      MPI_INT,
+		      0,
+		      uMPI::boundComm);
+      uMPI::broadcast((void*) subPBuf.buf(), // Now broadcast buffer itself.
+		      subProbSize,
+		      MPI_PACKED,
+		      0,
+		      uMPI::boundComm);
+    }
+
+
+
+    if (global()->getLowNodeMemory())
+    {
+      global()->getPosCovgFast(_monom,_posCovgIdx);
+      global()->getNegCovgFast(_monom,_negCovgIdx);
+    }
+
+    // Make an array of all the free variables, and count them
+
+    size_type n = global()->attribNum();
+    vector<size_type> freeVariable;
+    freeVariable.reserve(n);
+
+    for (size_type i = 0; i < global()->attribNum(); i++)
+      if (_monom.getVarVal(i) == NULL_VAL)
+	freeVariable.push_back(i);
+
+    size_type numFree = freeVariable.size();
+
+
+    // Figure which variables go on which processor.  Make them as
+    // even as possible -- the first (remainder) processors have one
+    // more variable
+
+    size_type quotient  = numFree / uMPI::boundSize;
+    size_type remainder = numFree % uMPI::boundSize;
+
+    size_type myFirstIndex = uMPI::boundRank*quotient + min(uMPI::boundRank,remainder);
+    size_type indexAfterMe = myFirstIndex + quotient + (uMPI::boundRank < remainder);
+
+  
+
+    // Now try all the indices assigned to this processor (this could
+    // be none if numFree < #processors and rank >= remainder
+
+    for (size_type i = myFirstIndex; 
+	 i < indexAfterMe && state != dead; 
+	 i++)
+      tryThreeWaySplit(freeVariable[i]);
+
+
+    DEBUGPR(10,ucout << "Best local choice is " << _branchChoice << endl);
+
+    branchChoice bestBranch;
+
+    uMPI::reduceCast(&_branchChoice,
+		     &bestBranch,
+		     1,
+		     branchChoice::mpiType,
+		     branchChoice::mpiCombiner,
+		     uMPI::boundComm);
+
+    // Now figure out if we had the best choice.  If so, there is
+    // nothing to do.  Otherwise, adjust everything so it looks like
+    // we made the globally best choice.
+
+    // If no children, this branching disjunctions proves we are at a 
+    // dead end, so set the state to dead.
+    if (!uMPI::isHead)
+      {
+        return;
+      }
+    else if (bestBranch.branchVar != _branchChoice.branchVar && uMPI::isHead)
+      {
+	      
+	DEBUGPR(10,ucout << "Adjusting local choice\n");
+	// Kill off any unneeded children from local choice
+	childrenVecType::iterator iter;
+	for (iter = _children.begin(); iter != _children.end(); iter++)
+	  delete *iter;
+	_children.resize(0);
+	// Set choice
+	_branchChoice = bestBranch;
+	// Recreate children
+	
+	for (size_type j=0; j<3; j++)
+	  {
+	    // If whichChild < 0, that means there are no more children
+	    // in this branch choice, so bail out
+	    if (bestBranch.branch[j].whichChild < 0)
+	      break;
+		
+	    // Make the correct child for this branch choice, in order
+	    maxMonomSub* tmp = allocateObject();
+	    int childCode = 3*bestBranch.branchVar 
+	                       + bestBranch.branch[j].whichChild;
+	    // As we create the child, specify that the bound is
+	    // already known, so we don't waste time recomputing it
+
+	    tmp->maxMonomSubAsChildOf(this,childCode,
+				      bestBranch.branch[j].exactBound);
+	    DEBUGPR(15,ucout << "Created " << tmp << endl);
+	    
+	    _children.push_back(tmp);
+
+	  }
+      }
+
+
+
+    if (_children.size() == 0)
+      setState(dead);
+    // Now clean up.  This is exactly the same as in serial or after ramp-up
+
+    if(uMPI::isHead)                  
+      boundComputationCleanUp(controlParam);
+    
+
+  }
 
   // Bound computation -- unless we're in ramp-up, just do the same
   // thing as the serial three-way code.  If we're in ramp-up, try to
@@ -380,7 +564,7 @@ namespace pebblMonom {
 
     if (!rampingUp())
       {
-	maxMonomSubThreeWay::boundComputation(controlParam);
+	parMaxMonomSubThreeWay::parBoundComputation(controlParam);
 	return;
       }
 

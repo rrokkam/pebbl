@@ -77,6 +77,8 @@ namespace pebblMonom {
       void unpack(UnPackBuffer & inBuffer);
       int spPackSize();
 
+      void doBoundWork();
+
       void reset(bool VBflag=true)
       {
 	maxMonomialData::reset();
@@ -129,6 +131,8 @@ namespace pebblMonom {
       void setMPGlobal(parMaxMonomialData* ptr) { mpGlobal = ptr; };
 
       void boundComputation(double* controlParam);
+
+      void parBoundComputation(double* controlParam);
 
     protected:
 

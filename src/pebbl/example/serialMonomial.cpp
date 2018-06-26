@@ -1607,7 +1607,8 @@ namespace pebblMonom {
 		    << " value=" << soln->value << ' '
 		    << soln->getMonomialObj() << endl);
 	    DEBUGPR(200,ucout << "Solution address " << (void *) soln << endl);
-            global()->foundSolution(soln);
+	    if(uMPI::isHead)
+              global()->foundSolution(soln);
 #ifdef ACRO_VALIDATING
 	    DEBUGPR(200,ucout << "incumbent = " 
 		    << (void *) global()->incumbent << endl);

@@ -1596,10 +1596,15 @@ template <class B,class PB> int driver(int argc, char** argv)
       
       if (!uMPI::isHead)
         {
+<<<<<<< HEAD
+=======
+          PB instance;
+>>>>>>> ac7416bd2d612ade2b8c408c2ac8b2339d2a2fff
           (&instance)->doBoundWork();
         } 
-      if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
+      else if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
 	{
+          PB instance;
 	  CommonIO::begin();
 	  CommonIO::setIOFlush(1);
 
@@ -1612,7 +1617,8 @@ template <class B,class PB> int driver(int argc, char** argv)
 	      instance.printConfiguration();
 	      instance.solve();
 	    }
-
+          int endSig = -1;
+	  uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
 	  CommonIO::end();
 	}
       else 

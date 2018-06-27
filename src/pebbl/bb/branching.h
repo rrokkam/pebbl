@@ -1136,9 +1136,6 @@ public:
   ///
   utilib::ParameterList plist;
 
-  // For use when arguments are parsed before a branching instance is created
-  bool setParameterList(utilib::ParameterList list) { plist = list; }
-
   ///
   bool parameters_registered;
 
@@ -1149,7 +1146,6 @@ public:
   //  double start_time;
 
   unsigned int min_num_required_args;
-
 
   ///
   virtual bool processParameters(int& argc, 

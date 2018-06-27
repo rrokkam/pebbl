@@ -1592,14 +1592,10 @@ template <class B,class PB> int driver(int argc, char** argv)
       int boundingGroupSize = parallel_bounding_test(argc, argv);
       uMPI::init(&argc,&argv,MPI_COMM_WORLD, boundingGroupSize);
       int nprocessors = uMPI::size;
-      PB instance;
       
       if (!uMPI::isHead)
         {
-<<<<<<< HEAD
-=======
           PB instance;
->>>>>>> ac7416bd2d612ade2b8c408c2ac8b2339d2a2fff
           (&instance)->doBoundWork();
         } 
       else if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 

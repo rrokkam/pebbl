@@ -33,24 +33,125 @@ using namespace std;
 
 namespace utilib {
 
+bool alreadyRunning;
+
 MPI_Comm uMPI::comm = MPI_COMM_WORLD;
 int uMPI::rank   = -1;
 int uMPI::size   = 1;
 int uMPI::ioProc = 0;
 int uMPI::iDoIO  = 1;
 
+MPI_Comm uMPI::boundComm = MPI_COMM_NULL;
+int uMPI::boundSize = 1;
+int uMPI::boundRank = -1;
+bool uMPI::isHead = false;
+
 int uMPI::errorCode = 0;
+
+// RR: This code seems more and more like a hack. Having to make assumptions about the
+// clustering.cpp code is not great, and so is the need to parse argv for options
+// that will tell us the information needed to figure out whether each hub will work.
+// Much of this replicates work done in the clustering code.
+// 
+// If possible, it would be nice to merge / salvage portions of this in the clustering
+// code. Maybe separate cluster objects for each bounding group, or modifying the current
+// cluster object to include information about the bounding groups of each of its workers.
+//
+// Maybe pending the changes to mpiComm stuff.
+// Once the mpiComm changes are added, the MPI_Comm pointers will be
+// unnecessary. Just set the variables in the base mpiComm class.
+void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize, 
+			     MPI_Comm *headCommunicator, 
+			     MPI_Comm *boundingCommunicator,
+			     int hubsDontWorkSize, int clusterSize) 
+{
+  duplicate(comm_, &comm);
+  return; // to isolate parameter parsing while debugging.
+
+  int worldRank;
+  int worldSize;
+
+  MPI_Comm_rank(comm_, &worldRank);
+  MPI_Comm_size(comm_, &worldSize);
+
+  bool hubsWork = hubsDontWorkSize > clusterSize;
+  int fullClusterSize = clusterSize * boundingGroupSize - (1 - hubsWork) * (boundingGroupSize - 1);
+
+  int boundGroup;
+
+  if (hubsWork) // would be nice to combine these two cases together.
+  {
+    isHead = worldRank % boundingGroupSize == 0;
+    MPI_Comm_split(comm_, isHead, worldRank, headCommunicator);
+    if (isHead)
+    {
+      MPI_Comm_rank(*headCommunicator, &rank);
+      MPI_Comm_size(*headCommunicator, &size);
+    }
+    else
+    {
+      MPI_Comm_free(headCommunicator);
+    }
+    boundGroup = worldRank / boundingGroupSize;
+    MPI_Comm_split(comm_, boundGroup, worldRank, boundingCommunicator);
+    MPI_Comm_rank(*boundingCommunicator, &boundRank);
+    MPI_Comm_size(*boundingCommunicator, &boundSize);
+  }
+  else
+  {
+    // this is tightly coupled with the decision making strategy
+    // pebbl uses to decide how ranks are associated to workers/hubs.
+    // Maybe this code shold be moved there, or scrapped to make
+    // something that uses Jonathan's forthcoming MPI code
+    int isHub = worldRank % fullClusterSize == 0;
+    isHead = ((worldRank % fullClusterSize)) % boundingGroupSize == 1;
+    int visibleToPebbl = isHub || isHead;
+    MPI_Comm_split(comm_, visibleToPebbl, worldRank, headCommunicator);
+    if (visibleToPebbl)
+    {	
+      MPI_Comm_rank(*headCommunicator, &rank);
+      MPI_Comm_size(*headCommunicator, &size);
+    }
+    else
+    {
+      MPI_Comm_free(headCommunicator);	
+    }		
+    boundGroup = (worldRank - (worldRank / fullClusterSize + 1)) / boundingGroupSize;
+    if (worldRank % fullClusterSize == 0 && (worldSize - worldRank > fullClusterSize || worldSize % fullClusterSize <= boundingGroupSize * (hubsDontWorkSize - 1)))
+    { // we are a pure hub
+      boundGroup = -1;
+    }		
+    MPI_Comm_split(comm_, boundGroup, worldRank, boundingCommunicator);
+    if (boundGroup >= 0)
+    {
+      MPI_Comm_rank(*boundingCommunicator, &boundRank);
+      MPI_Comm_size(*boundingCommunicator, &boundSize);
+    }
+    else
+    {
+      MPI_Comm_free(boundingCommunicator);
+    }
+  }
+  init(*headCommunicator); // reset the ranks and sizes.
+}
 
 
 void uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
 {
-  if (!running())
+  char *prev_dir;
+  alreadyRunning = running();
+  if (!alreadyRunning)
     {
-      char* prev_dir = getcwd(0,256);
+      prev_dir = getcwd(0,256);
       errorCode = MPI_Init(argcP,argvP);
       if (errorCode)
 	 ucerr << "MPI_Init failed, code " << errorCode << endl;
-      init(comm_);
+    }
+
+  init(comm_);
+
+  if (!alreadyRunning)
+    {
       // Work around an mpich problem: force the current working directory
       // after mpi_init to be the same as before we called it.  This is only
       // applied in serial, since otherwise we assume that mpirun has
@@ -59,8 +160,6 @@ void uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
 	 chdir(prev_dir);
       free(prev_dir);
     }
-  else
-    init(comm_);
 }
 
 void uMPI::init(MPI_Comm comm_)
@@ -115,7 +214,8 @@ void uMPI::done()
 {
   if (size > 1) 
      CommonIO::end_tagging();
-  MPI_Finalize();
+  if (!alreadyRunning)
+     MPI_Finalize();
 };
 
 

@@ -145,6 +145,12 @@ public:
   ///
   int printSpTimes;
 
+#ifdef ACRO_HAVE_MPI
+  /// The preferred size for groups of bounding processors.
+  /// This count includes the worker that is in the head communicator.
+  int boundingGroupSize;
+#endif
+
 };
 
 } // namespace pebbl

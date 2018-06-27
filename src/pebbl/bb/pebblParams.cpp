@@ -63,6 +63,9 @@ pebblParams::pebblParams()
     enumHashSize(1024),
     debug_solver_params(false),
     printSpTimes(0),
+#ifdef ACRO_HAVE_MPI
+    boundingGroupSize(1),
+#endif
 #ifdef ACRO_VALIDATING
     use_abort(true)
 #else
@@ -332,6 +335,16 @@ pebblParams::pebblParams()
                 "1=print statistics only, 2=print for each subproblems",
 		"Search",
 		utilib::ParameterBounds<int>(0,2));
+
+#ifdef ACRO_HAVE_MPI
+/// BOUNDING GROUPS
+
+  create_categorized_parameter("boundingGroupSize",boundingGroupSize,
+		"<int>","1", 
+		"Preferred size for processor groups working on bounding",
+		"Bounding Groups",
+		utilib::ParameterPositive<int>());
+#endif
 
 }
 

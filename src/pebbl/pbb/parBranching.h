@@ -1553,28 +1553,48 @@ namespace pebbl {
 template <class ParBranchingType>
 inline bool parallel_exec_test(int argc, char** argv, int nproc)
 {
-  if (nproc > 1) return true;
+  bool sawBoundingGroupSize = false;
   for (int i=1; i<argc; i++) 
   {
     if (strncmp(argv[i],"--help",6) == 0) return true;
     if (strncmp(argv[i],"--forceParallel",15) == 0) return true;
+    if (strncmp(argv[i],"--boundingGroupSize=",20) == 0) 
+    {
+      int boundSize = strtol(argv[i] + 20, NULL, 10);
+      if (boundSize <= 0) 
+        boundSize = 1; // use the default.
+      if (boundSize < nproc) return true;
+      sawBoundingGroupSize = true;
+    }
   }
-  return false;
+  return !sawBoundingGroupSize && nproc > 1;
 }
 
-template <class PB> bool runParallel(int argc, char** argv, 
-  MPI_Comm comm_=MPI_COMM_WORLD)
+
+template <class PB> 
+bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
 {
-  bool flag;
   CommonIO::begin();
   CommonIO::setIOFlush(1);
 
   PB instance;
-  utilib::exception_mngr::set_stack_trace(false);
-  flag = instance.setup(argc,argv);
-  utilib::exception_mngr::set_stack_trace(true);
+  bool flag = instance.setup(argc,argv);
   if (flag)
   {
+    if (instance.boundingGroupSize > 1) 
+    {
+      MPI_Comm headComm, boundComm; // remove when mpicomm class is added
+      uMPI::splitCommunicator(comm_, // eventually only take comm_
+        1, &headComm, &boundComm, 10, 64); // calls mpi::init(comm_) again!
+      if (boundComm == MPI_COMM_NULL)
+      {
+        // we are a bounding processor, no need to reset/solve.
+        // wait for work
+        
+        // dummy printout
+        std::cout << "my boundComm is null" << std::endl;
+      }
+    }
     instance.reset();
     instance.printConfiguration();
     instance.solve();
@@ -1586,23 +1606,18 @@ template <class PB> bool runParallel(int argc, char** argv,
 
 /// Prepackaged parallel/serial main program
 
-template <class B,class PB> int driver(int argc, char** argv,
-  MPI_Comm comm_=MPI_COMM_WORLD)
+template <class B,class PB> 
+int driver(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
 {
-  bool flag = true;
+  bool flag;
   try
   {
-    // parse arguments FIRST.
-    // then init MPI and decide whether to split?
-    // then decide serial/parallel
-    // The weird thing is that we need to init MPI in order
-    // to tell whether the program is running in parallel.
     uMPI::init(&argc, &argv, comm_);
     int nproc = uMPI::size;
     if (parallel_exec_test<parallelBranching>(argc, argv, nproc))
       flag = runParallel<PB>(argc, argv, comm_);
     else
-      flag = runSerial<B>(argc, argv);
+      flag = runSerial<B>(argc, argv, comm_);
     uMPI::done();
   }
   STD_CATCH(CommonIO::end(); uMPI::done();)
@@ -1613,7 +1628,7 @@ template <class B,class PB> int driver(int argc, char** argv,
 }
 
 
-#endif
+#endif // ACRO_HAVE_MPI
 
 
 #endif

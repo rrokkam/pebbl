@@ -191,18 +191,6 @@ public:
 #endif
 	}
 
-#if 0
-  ///
-  template <class T>
-  void create_parameter(const string& name, T& data)
-		{create_parameter(name,data,"","","");}
-
-  ///
-  template <class T, class FuncT>
-  void create_parameter(const string& name, T& data, 
-				FuncT validation_func)
-		{create_parameter(name,data,"","","",validation_func);}
-#endif
 
   /// Create a parameter
   template <class T>

@@ -58,16 +58,15 @@ int uMPI::errorCode = 0;
 // cluster object to include information about the bounding groups of each of its workers.
 //
 // Maybe pending the changes to mpiComm stuff.
+// Once the mpiComm changes are added, the MPI_Comm pointers will be
+// unnecessary. Just set the variables in the base mpiComm class.
 void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize, 
 			     MPI_Comm *headCommunicator, 
-			     MPI_Comm *boundingCommunicator
-			     /*, int hubsDontWorkSize, int clusterSize */) 
+			     MPI_Comm *boundingCommunicator,
+			     int hubsDontWorkSize, int clusterSize) 
 {
-  //duplicate(comm, headCommunicator);
-  //return;
-
-  int hubsDontWorkSize = 1000; // these two are for testing for now.
-  int clusterSize = 64; // Default in parPebblParams
+  duplicate(comm_, &comm);
+  return; // to isolate parameter parsing while debugging.
 
   int worldRank;
   int worldSize;
@@ -133,10 +132,11 @@ void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
       MPI_Comm_free(boundingCommunicator);
     }
   }
+  init(*headCommunicator); // reset the ranks and sizes.
 }
 
 
-bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
+void uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
 {
   char *prev_dir;
   alreadyRunning = running();
@@ -147,7 +147,7 @@ bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
       if (errorCode)
 	 ucerr << "MPI_Init failed, code " << errorCode << endl;
     }
-  
+
   init(comm_);
 
   if (!alreadyRunning)
@@ -159,7 +159,6 @@ bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
       if (size == 1)
 	 chdir(prev_dir);
       free(prev_dir);
-      return true;
     }
 }
 

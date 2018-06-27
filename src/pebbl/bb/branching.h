@@ -1646,17 +1646,30 @@ void branchPool<SUB,LOAD>::clear()
 
 /// Guts of prepackaged serial main program
 
-template <class B> bool runSerial(int argc,char** argv)
+template <class B> bool runSerial(int argc,char** argv,
+  MPI_Comm comm_=MPI_COMM_WORLD)
 {
   B instance;
-  utilib::exception_mngr::set_stack_trace(false);
+  // with parallel bounding, could cause issues with multiple printouts
   bool flag = instance.setup(argc,argv);
   if (flag)
-    {
-      utilib::exception_mngr::set_stack_trace(true); 
-      instance.reset();
-      instance.solve();
-    }
+  {    
+    // if (boundingGroupSize > 1) 
+    // {
+
+    //   // Remove these variables when the mpiComm class is added.
+    //   // the splitCommunicator function should only take comm_ eventually
+    //   MPI_Comm headComm, boundComm;
+    //   uMPI::splitCommunicator(comm_, 1, &headComm, &boundComm, 10, 64);
+    //   if (boundComm == MPI_COMM_NULL)
+    //   {
+    //     // wait for work
+    //   }
+    //   // doesn't actually split the communicator for now.
+    // }
+    instance.reset();
+    instance.solve();
+  }
   return flag;
 }
 

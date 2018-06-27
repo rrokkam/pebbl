@@ -33,6 +33,8 @@ using namespace std;
 
 namespace utilib {
 
+bool alreadyRunning;
+
 MPI_Comm uMPI::comm = MPI_COMM_WORLD;
 int uMPI::rank   = -1;
 int uMPI::size   = 1;
@@ -42,7 +44,7 @@ int uMPI::iDoIO  = 1;
 MPI_Comm uMPI::boundComm = MPI_COMM_NULL;
 int uMPI::boundSize = 1;
 int uMPI::boundRank = -1;
-bool uMPI::isHead = false;
+bool uMPI::isHead = true;
 
 int uMPI::errorCode = 0;
 
@@ -56,16 +58,13 @@ int uMPI::errorCode = 0;
 // cluster object to include information about the bounding groups of each of its workers.
 //
 // Maybe pending the changes to mpiComm stuff.
+// Once the mpiComm changes are added, the MPI_Comm pointers will be
+// unnecessary. Just set the variables in the base mpiComm class.
 void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize, 
-			     MPI_Comm *headCommunicator, 
-			     MPI_Comm *boundingCommunicator
-			     /*, int hubsDontWorkSize, int clusterSize */) 
+			     int hubsDontWorkSize, int clusterSize) 
 {
-  //duplicate(comm, headCommunicator);
-  //return;
-
-  int hubsDontWorkSize = 1000; // these two are for testing for now.
-  int clusterSize = 64; // Default in parPebblParams
+  //duplicate(comm_, &comm);
+  //return; // to isolate parameter parsing while debugging.
 
   int worldRank;
   int worldSize;
@@ -73,7 +72,7 @@ void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
   MPI_Comm_rank(comm_, &worldRank);
   MPI_Comm_size(comm_, &worldSize);
 
-  bool hubsWork = hubsDontWorkSize > clusterSize;
+  bool hubsWork = hubsDontWorkSize > (worldSize % clusterSize);
   int fullClusterSize = clusterSize * boundingGroupSize - (1 - hubsWork) * (boundingGroupSize - 1);
 
   int boundGroup;
@@ -81,20 +80,15 @@ void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
   if (hubsWork) // would be nice to combine these two cases together.
   {
     isHead = worldRank % boundingGroupSize == 0;
-    MPI_Comm_split(comm_, isHead, worldRank, headCommunicator);
-    if (isHead)
+    MPI_Comm_split(comm_, isHead, worldRank, &comm);
+    if (!isHead)
     {
-      MPI_Comm_rank(*headCommunicator, &rank);
-      MPI_Comm_size(*headCommunicator, &size);
-    }
-    else
-    {
-      MPI_Comm_free(headCommunicator);
+      MPI_Comm_free(&comm);
     }
     boundGroup = worldRank / boundingGroupSize;
-    MPI_Comm_split(comm_, boundGroup, worldRank, boundingCommunicator);
-    MPI_Comm_rank(*boundingCommunicator, &boundRank);
-    MPI_Comm_size(*boundingCommunicator, &boundSize);
+    MPI_Comm_split(comm_, boundGroup, worldRank, &boundComm);
+    MPI_Comm_rank(boundComm, &boundRank);
+    MPI_Comm_size(boundComm, &boundSize);
   }
   else
   {
@@ -105,40 +99,36 @@ void uMPI::splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
     int isHub = worldRank % fullClusterSize == 0;
     isHead = ((worldRank % fullClusterSize)) % boundingGroupSize == 1;
     int visibleToPebbl = isHub || isHead;
-    MPI_Comm_split(comm_, visibleToPebbl, worldRank, headCommunicator);
-    if (visibleToPebbl)
-    {	
-      MPI_Comm_rank(*headCommunicator, &rank);
-      MPI_Comm_size(*headCommunicator, &size);
-    }
-    else
+    MPI_Comm_split(comm_, visibleToPebbl, worldRank, &comm);
+    if (!visibleToPebbl)
     {
-      MPI_Comm_free(headCommunicator);	
+      MPI_Comm_free(&comm);	
     }		
     boundGroup = (worldRank - (worldRank / fullClusterSize + 1)) / boundingGroupSize;
     if (worldRank % fullClusterSize == 0 && (worldSize - worldRank > fullClusterSize || worldSize % fullClusterSize <= boundingGroupSize * (hubsDontWorkSize - 1)))
     { // we are a pure hub
       boundGroup = -1;
     }		
-    MPI_Comm_split(comm_, boundGroup, worldRank, boundingCommunicator);
+    MPI_Comm_split(comm_, boundGroup, worldRank, &boundComm);
     if (boundGroup >= 0)
     {
-      MPI_Comm_rank(*boundingCommunicator, &boundRank);
-      MPI_Comm_size(*boundingCommunicator, &boundSize);
+      MPI_Comm_rank(boundComm, &boundRank);
+      MPI_Comm_size(boundComm, &boundSize);
     }
     else
     {
-      MPI_Comm_free(boundingCommunicator);
+      MPI_Comm_free(&boundComm);
     }
   }
+  if(isHead)
+  	init(comm); // reset the ranks and sizes.
 }
 
 
-bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_, 
-		int boundingGroupSize)
+void uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_)
 {
   char *prev_dir;
-  bool alreadyRunning = running();
+  alreadyRunning = running();
   if (!alreadyRunning)
     {
       prev_dir = getcwd(0,256);
@@ -147,14 +137,7 @@ bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_,
 	 ucerr << "MPI_Init failed, code " << errorCode << endl;
     }
 
-  splitCommunicator(comm_, boundingGroupSize, &comm, &boundComm);
-  
-  if (comm == MPI_COMM_NULL)
-  {
-    return false;
-  }
-  
-  init(comm);
+  init(comm_);
 
   if (!alreadyRunning)
     {
@@ -165,7 +148,6 @@ bool uMPI::init(int* argcP, char*** argvP, MPI_Comm comm_,
       if (size == 1)
 	 chdir(prev_dir);
       free(prev_dir);
-      return true;
     }
 }
 
@@ -186,9 +168,9 @@ void uMPI::init(MPI_Comm comm_)
   // fall back on ioProc=0 default.
   int flag, result;
   int* mpiIOP;
-  errorCode = MPI_Attr_get(MPI_COMM_WORLD,MPI_IO,&mpiIOP,&flag);
+  errorCode = MPI_Comm_get_attr(MPI_COMM_WORLD,MPI_IO,&mpiIOP,&flag);
   if (errorCode || !flag)
-     ucerr << "MPI_Attr_get(MPI_IO) failed, code " << errorCode << endl;
+     ucerr << "MPI_Comm_get_attr(MPI_IO) failed, code " << errorCode << endl;
   MPI_Comm_compare(comm, MPI_COMM_WORLD, &result);
   if (result==MPI_IDENT || result==MPI_CONGRUENT) // no mapping of MPI_IO reqd.
     ioProc = *mpiIOP;
@@ -221,20 +203,21 @@ void uMPI::done()
 {
   if (size > 1) 
      CommonIO::end_tagging();
-  if (boundComm != MPI_COMM_NULL)
+  if (boundComm != MPI_COMM_NULL || boundComm != MPI_COMM_WORLD)
     MPI_Comm_free(&boundComm);
-  if (comm != MPI_COMM_NULL)
+  if (comm != MPI_COMM_NULL || comm != MPI_COMM_WORLD)
     MPI_Comm_free(&comm);
-  MPI_Finalize();
+  if (!alreadyRunning)
+     MPI_Finalize();
 };
 
 
 int uMPI::sizeOf(MPI_Datatype t)
 {
-  MPI_Aint extent;
-  errorCode = MPI_Type_extent(t,&extent);
+  MPI_Aint extent, lb;
+  errorCode = MPI_Type_get_extent(t,&lb,&extent);
   if (errorCode)
-     ucerr << "MPI_Type_extent failed, code " << errorCode << endl;
+     ucerr << "MPI_Type_get_extent failed, code " << errorCode << endl;
   return extent;
 }
 

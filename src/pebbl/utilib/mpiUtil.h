@@ -135,12 +135,10 @@ public:
 
   /// Split a provided communicator into a head group and bounding groups.
   static void splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
-  				MPI_Comm *headCommunicator,
-				MPI_Comm *boundingCommunicator);
+				int hubsDontWorkSize, int clusterSize);
 
   /// Initializes MPI.
-  static bool init(int* argcP,char*** argv, MPI_Comm comm_=MPI_COMM_WORLD,
-  		   int boundingGroupSize=1);
+  static void init(int* argcP,char*** argv, MPI_Comm comm=MPI_COMM_WORLD);
 
   /// Initializes MPI with a comm object (assumes that MPI is running)
   static void init(MPI_Comm comm_=MPI_COMM_WORLD);

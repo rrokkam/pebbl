@@ -52,8 +52,6 @@
 #include <pebbl/pbb/packedSolution.h>
 #include <pebbl/misc/chunkAlloc.h>
 
-#include <iostream> // For debugging of driver
-
 // John S's magic so we don't need an operator= for GenericHeaps
 
 namespace utilib {
@@ -1557,81 +1555,88 @@ namespace pebbl {
 template <class ParBranchingType>
 inline bool parallel_exec_test(int argc, char** argv, int nproc)
 {
-if (nproc > 1) return true;
-for (int i=1; i<argc; i++) {
-  if (strncmp(argv[i],"--help",6) == 0) return true;
-  if (strncmp(argv[i],"--forceParallel",15) == 0) return true;
-  }
-return false;
-}
-
-static inline int parallel_bounding_test(int argc, char** argv)
-{
-  int boundingGroupSize = 1;
+  bool sawBoundingGroupSize = false;
   for (int i=1; i<argc; i++) 
   {
-    if (strncmp(argv[i],"--boundingGroupSize=",20) == 0)
+    if (strncmp(argv[i],"--help",6) == 0) return true;
+    if (strncmp(argv[i],"--forceParallel",15) == 0) return true;
+    if (strncmp(argv[i],"--boundingGroupSize=",20) == 0) 
     {
-      boundingGroupSize = strtol(argv[i] + 20, NULL, 10); 
-      if (boundingGroupSize > 1)
-	return boundingGroupSize;
-      break;
+      int boundSize = strtol(argv[i] + 20, NULL, 10);
+      if (boundSize <= 0) 
+        boundSize = 1; // use the default.
+      if (boundSize < nproc) return true;
+      sawBoundingGroupSize = true;
     }
   }
-  return 1; 
+  return !sawBoundingGroupSize && nproc > 1;
 }
 
-/// Prepackaged parallel/serial main program
 
-template <class B,class PB> int driver(int argc, char** argv)
+template <class PB> 
+bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
 {
-  bool flag = true;
+  CommonIO::begin();
+  CommonIO::setIOFlush(1);
 
-  try 
+  PB instance;
+  bool flag = instance.setup(argc,argv);
+  if (flag)
     {
-      int boundingGroupSize = parallel_bounding_test(argc, argv);
-      uMPI::init(&argc,&argv,MPI_COMM_WORLD, boundingGroupSize);
-      int nprocessors = uMPI::size;
-      
+      if (instance.boundingGroupSize > 1) 
+        {
+          uMPI::splitCommunicator(comm_, // eventually only take comm_
+            instance.boundingGroupSize,
+			instance.hubsDontWorkSize, 
+			instance.clusterSize); // calls mpi::init(comm_) again!
+        }
       if (!uMPI::isHead)
         {
           PB instance;
           (&instance)->doBoundWork();
         } 
-      else if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 
-	{
-          PB instance;
-	  CommonIO::begin();
-	  CommonIO::setIOFlush(1);
-
-          utilib::exception_mngr::set_stack_trace(false);
-	  flag = instance.setup(argc,argv);
-          utilib::exception_mngr::set_stack_trace(true);
-	  if (flag)
-	    {
-	      instance.reset();
-	      instance.printConfiguration();
-	      instance.solve();
-	    }
-          int endSig = -1;
-	  uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
-	  CommonIO::end();
-	}
-      else 
-	flag = runSerial<B>(argc,argv);
-
-      uMPI::done();
+      else
+        {	
+          instance.reset();
+          instance.printConfiguration();
+          instance.solve();
+		  if (instance.boundingGroupSize > 1)
+		    {
+              int endSig = -1;
+              uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
+		    }
+        }
+      CommonIO::end();
     }
 
+  return flag;
+}
+
+/// Prepackaged parallel/serial main program
+
+template <class B,class PB> 
+int driver(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
+{
+  bool flag;
+  try
+  {
+    uMPI::init(&argc, &argv, comm_);
+    int nproc = uMPI::size;
+    if (parallel_exec_test<parallelBranching>(argc, argv, nproc))
+      flag = runParallel<PB>(argc, argv, comm_);
+    else
+      flag = runSerial<B>(argc, argv, comm_);
+    uMPI::done();
+  }
   STD_CATCH(CommonIO::end(); uMPI::done();)
 
-  return !flag;
+  return !flag; // 0 if success/true, 1 if failure/false
 }
 
 }
 
 
-#endif
+#endif // ACRO_HAVE_MPI
 
 
 #endif

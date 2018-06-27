@@ -1581,7 +1581,7 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
 
   PB instance;
   bool flag = instance.setup(argc,argv);
-  if (flag)
+  if (1)
     {
       if (instance.boundingGroupSize > 1) 
         {
@@ -1592,7 +1592,6 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
         }
       if (!uMPI::isHead)
         {
-          PB instance;
           (&instance)->doBoundWork();
         } 
       else
@@ -1605,11 +1604,12 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
               int endSig = -1;
               uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
 		    }
+			
         }
       CommonIO::end();
     }
 
-  return flag;
+  return 1;
 }
 
 /// Prepackaged parallel/serial main program

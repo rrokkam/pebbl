@@ -203,10 +203,12 @@ void uMPI::done()
 {
   if (size > 1) 
      CommonIO::end_tagging();
+	 /*
   if (boundComm != MPI_COMM_NULL || boundComm != MPI_COMM_WORLD)
     MPI_Comm_free(&boundComm);
   if (comm != MPI_COMM_NULL || comm != MPI_COMM_WORLD)
     MPI_Comm_free(&comm);
+	*/
   if (!alreadyRunning)
      MPI_Finalize();
 };

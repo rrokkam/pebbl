@@ -154,6 +154,9 @@ public:
 
   virtual void doBoundWork() {return; };
 
+  // Set up the bounding communicators.
+  void setupCommunicators(MPI_Comm comm_);
+
   // This broadcasts a problem read on the I/O processor to all the
   // other processors.
 
@@ -1581,36 +1584,53 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
 
   PB instance;
   bool flag = instance.setup(argc,argv);
-  if (1)
+  if (flag)
+  {
+    // make the group with clustersize = fullclustersize
+    // if boundingGroupSize == 1, it's the real head communicator.
+    // otherwise use it to find the true hubs and split on that
+    // then make the bounding communicators by doing a mod
+    // if we're a bounder, doBoundWork, otherwise do the standard PEBBL routine
+    instance.setupCommunicators(comm_); // eventually, this should go into packBranching
+	if (!uMPI::isHead)
     {
-      if (instance.boundingGroupSize > 1) 
-        {
-          uMPI::splitCommunicator(comm_, // eventually only take comm_
-            instance.boundingGroupSize,
-			instance.hubsDontWorkSize, 
-			instance.clusterSize); // calls mpi::init(comm_) again!
-        }
-      if (!uMPI::isHead)
-        {
-          (&instance)->doBoundWork();
-        } 
-      else
-        {	
-          instance.reset();
-          instance.printConfiguration();
-          instance.solve();
-		  if (instance.boundingGroupSize > 1)
-		    {
-              int endSig = -1;
-              uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
-		    }
-			
-        }
-      CommonIO::end();
-    }
+      (&instance)->doBoundWork();
+	}
+	else
+	{
+	  if (instance.boundingGroupSize > 1)
+	    uMPI::init(uMPI::comm);
+      instance.reset();
+      instance.printConfiguration();
+      instance.solve();
+	  
+	  if (instance.boundingGroupSize > 1)
+ 	  {
+        int endSig = -1;
+        uMPI::broadcast(&endSig,1,MPI_INT,0,uMPI::boundComm); 
+      } 
+	}
+  }
 
-  return 1;
+
+  CommonIO::end();
+  return flag;
 }
+
+
+//  if (instance.boundingGroupSize > 1) 
+//    {
+//      MPI_Comm headComm, boundComm;
+//      uMPI::splitCommunicator(comm_, // eventually only take comm_
+//        1, &headComm, &boundComm, 10, 64); // calls mpi::init(comm_) again!
+//      if (boundComm == MPI_COMM_NULL)
+//      {
+//        // we are a bounding processor, no need to reset/solve. Should
+//	// doBoundWork here
+//      }
+//    }
+
+
 
 /// Prepackaged parallel/serial main program
 

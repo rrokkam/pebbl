@@ -128,10 +128,10 @@ void uMPI::done()
      CommonIO::end_tagging();
   if (uMPI::boundSize >= 1)
     MPI_Comm_free(&boundComm);
-    /*
-  if (comm != MPI_COMM_NULL || comm != MPI_COMM_WORLD)
+  if (comm != MPI_COMM_NULL && comm != MPI_COMM_WORLD)
+  {
     MPI_Comm_free(&comm);
-    */
+  }
   if (!alreadyRunning)
      MPI_Finalize();
 };

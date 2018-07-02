@@ -1197,7 +1197,7 @@ void parallelBranching::setupCommunicators(MPI_Comm comm_)
   {
     MPI_Comm_free(&uMPI::comm);
     uMPI::comm = MPI_COMM_NULL;
-    sMPI::isHead = false;
+    uMPI::isHead = false;
   }
   else
   {

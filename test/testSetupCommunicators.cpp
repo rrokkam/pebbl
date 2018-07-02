@@ -239,7 +239,7 @@ void setupCommunicators(MPI_Comm comm_,
 	  (clusterSize - !hubsWork) * boundingGroupSize;
   int clustersWanted = worldSize / fullClusterSize;
   int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
-  worldCluster.reset(worldRank, worldSize, 0, clustersWanted,
+  worldCluster.reset(worldRank, worldSize, fullClusterSize, clustersWanted,
 		  forceSeparateSize);
  
   int inBoundingGroup = worldCluster.isFollower();
@@ -267,13 +267,14 @@ void setupCommunicators(MPI_Comm comm_,
     uMPI::headComm = MPI_COMM_NULL;
   } 
 
-
+  // might not need isLeader if !isFollower => isLeader
+  bool pureHub = !worldCluster.isFollower() && worldCluster.isLeader();
   // set variables for printing
   if (uMPI::headComm != MPI_COMM_NULL)
   {
     MPI_Comm_rank(uMPI::headComm, &headRank);
   }
-  if (uMPI::boundComm != MPI_COMM_NULL)
+  if (uMPI::boundComm != MPI_COMM_NULL && !pureHub)
   {
     MPI_Comm_rank(uMPI::boundComm, &boundRank);
   }

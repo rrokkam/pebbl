@@ -1163,7 +1163,7 @@ bool parallelBranching::setup(int& argc, char**& argv)
 
 void parallelBranching::setupCommunicators(MPI_Comm comm_)
 {
-  ClusterObj worldCluster; // use to find pure hubs, then throw away
+  clusterObj worldCluster; // use to find pure hubs, then throw away
   int worldRank, worldSize;
   MPI_Comm_rank(comm_, &worldRank);
   MPI_Comm_size(comm_, &worldSize);
@@ -1173,10 +1173,10 @@ void parallelBranching::setupCommunicators(MPI_Comm comm_)
 	  (clusterSize - !hubsWork) * boundingGroupSize;
   int clustersWanted = worldSize / fullClusterSize;
   int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
-  worldCluster.reset(worldRank, worldSize, 0, clustersWanted,
+  worldCluster.reset(worldRank, worldSize, fullClusterSize, clustersWanted,
 		  forceSeparateSize);
  
-  int inBoundingGroup = worldCluster.isFollower();
+  int inBoundingGroup = worldCluster.isFollower(worldRank);
   MPI_Comm boundingProcessors; // one for all pure hubs, one for people in bounding groups
   MPI_Comm_split(comm_, inBoundingGroup, worldRank, &boundingProcessors);
   int boundingProcessorsRank;
@@ -1186,20 +1186,32 @@ void parallelBranching::setupCommunicators(MPI_Comm comm_)
     int groupNum = boundingProcessorsRank / boundingGroupSize;
     MPI_Comm_split(boundingProcessors, groupNum, worldRank, &uMPI::boundComm); 
   }
-  else
-  {
-    MPI_Comm_free(boundingProcessors);
-    boundingProcessors = MPI_COMM_NULL;
-  }
+  MPI_Comm_free(&boundingProcessors);
+  boundingProcessors = MPI_COMM_NULL;
   int isWorker = (boundingProcessorsRank % boundingGroupSize == 0); 
-  int notMinion = worldCluster.isLeader() || isWorker;
-  MPI_Comm headComm;
-  MPI_Comm_split(comm_, notMinion, worldRank, &headComm);
+  int notMinion = worldCluster.isLeader(worldRank) || isWorker;
+  MPI_Comm_split(comm_, notMinion, worldRank, &uMPI::comm);
   if (!notMinion)
   {
-    MPI_Comm_free(headComm);
-    headComm = MPI_COMM_NULL;
+    MPI_Comm_free(&uMPI::comm);
+    uMPI::comm = MPI_COMM_NULL;
   }
+  else
+  {
+    uMPI::isHead = true;
+  }
+
+  bool pureHub = !worldCluster.isFollower(worldRank) && worldCluster.isLeader(worldRank);
+
+  if (uMPI::comm != MPI_COMM_NULL)
+  {
+    MPI_Comm_rank(uMPI::comm, &uMPI::rank);
+  }
+  if (uMPI::boundComm != MPI_COMM_NULL && !pureHub)
+  {
+    MPI_Comm_rank(uMPI::boundComm, &uMPI::boundRank);
+  }
+  
 }
 
 // To broadcast a problem to all processors

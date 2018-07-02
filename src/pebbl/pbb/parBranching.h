@@ -1591,10 +1591,17 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
     // then make the bounding communicators by doing a mod
     // if we're a bounder, doBoundWork, otherwise do the standard PEBBL routine
     instance.setupCommunicators(comm_); // eventually, this should go into packBranching
+	if (!uMPI::isHead)
+    {
+		while(1);
+	}
+	if (instance.boundingGroupSize > 1)
+	  uMPI::init(uMPI::comm);
     instance.reset();
     instance.printConfiguration();
     instance.solve();
   }
+
 
   CommonIO::end();
   return flag;

@@ -1075,7 +1075,11 @@ protected:
 
   // To help in printing out configuration and timing information.
 
-  void configLine(std::ostream& stream,int pWidth,int number, const char* kind);
+  void configLine(std::ostream& stream,
+		  int pWidth,
+		  int number,
+		  int numProcessors,
+		  const char* kind);
 
   void timingPrintText(std::ostream& stream,
 		       char  percentTotalFill = '-',
@@ -1606,20 +1610,6 @@ bool runParallel(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
   CommonIO::end();
   return flag;
 }
-
-
-//  if (instance.boundingGroupSize > 1) 
-//    {
-//      MPI_Comm headComm, boundComm;
-//      uMPI::splitCommunicator(comm_, // eventually only take comm_
-//        1, &headComm, &boundComm, 10, 64); // calls mpi::init(comm_) again!
-//      if (boundComm == MPI_COMM_NULL)
-//      {
-//        // we are a bounding processor, no need to reset/solve. Should
-//	// doBoundWork here
-//      }
-//    }
-
 
 
 /// Prepackaged parallel/serial main program

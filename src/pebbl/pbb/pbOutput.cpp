@@ -616,29 +616,47 @@ void parLoadLogRecord::writeToStream(ostream& os,
 
 void parallelBranching::printConfiguration(ostream& stream)
 {
+  int minions = 0;
+  if (boundingGroupSize > 1)
+  {
+    // compute the size of the bounding group
+    // is there a way to do this without communication?
+    minions = uMPI::sum(iAmWorker() ? uMPI::boundSize - 1 : 0);
+	  // do a sum across heads to compute number of bounding processors?
+  }
   if (!uMPI::iDoIO)
     return;
+
+  int numProcessors = uMPI::size + minions;
+
   CommonIO::end_tagging();
   stream << "\nPEBBL Configuration:\n";
   hyphens(stream,19) << '\n';
   int pWidth = digitsNeededFor(uMPI::size);
   stream.width(pWidth);
+  
   stream << numHubs() << " cluster" << plural(numHubs());
   int mod  = uMPI::size % cluster.typicalSize;
   if (mod)
     stream << ": " << numHubs() - 1;
   stream << " of size " << cluster.typicalSize;
   if (mod)
-    stream << ", 1 of size " << mod;
+    stream << ", 1 of size " << mod << " (not including minions)";
   stream << '\n';
   stream.width(pWidth);
-  stream << uMPI::size << " processor" << plural(uMPI::size) << '\n';
+  
+  stream << numProcessors << " processor" << plural(numProcessors) << '\n';
   int pureHubs    = uMPI::size - totalWorkers();
   int workerHubs  = numHubs() - pureHubs;
   int pureWorkers = totalWorkers() - workerHubs;
-  configLine(stream,pWidth,pureWorkers,"pure worker");
-  configLine(stream,pWidth,pureHubs,   "pure hub");
-  configLine(stream,pWidth,workerHubs, "worker-hub");
+  configLine(stream,pWidth,pureWorkers,numProcessors,"pure worker");
+  configLine(stream,pWidth,pureHubs,numProcessors,   "pure hub");
+  configLine(stream,pWidth,workerHubs,numProcessors, "worker-hub");
+  if (boundingGroupSize > 1)
+  {
+    configLine(stream,pWidth,minions,numProcessors,  "minion");
+  }
+
   stream << "\nTarget timeslice: " << timeSlice << " second";
   if (timeSlice != 1)
     stream << 's';
@@ -650,6 +668,7 @@ void parallelBranching::printConfiguration(ostream& stream)
 void parallelBranching::configLine(ostream& stream,
 				   int      pWidth,
 				   int      number,
+				   int      numProcessors,
 				   const char*    kind)
 {
   if (number == 0)
@@ -661,7 +680,7 @@ void parallelBranching::configLine(ostream& stream,
   stream << plural(number);
   stream.width(padding);
   stream << "(";
-  printPercent(stream,number,uMPI::size) << ")\n";
+  printPercent(stream,number,numProcessors) << ")\n";
 }
 
 

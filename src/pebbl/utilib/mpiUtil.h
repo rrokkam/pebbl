@@ -135,8 +135,6 @@ public:
 
   /// Split a provided communicator into a head group and bounding groups.
   static void splitCommunicator(MPI_Comm comm_, int boundingGroupSize,
-  				MPI_Comm *headCommunicator,
-				MPI_Comm *boundingCommunicator,
 				int hubsDontWorkSize, int clusterSize);
 
   /// Initializes MPI.

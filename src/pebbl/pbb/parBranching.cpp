@@ -1161,6 +1161,46 @@ bool parallelBranching::setup(int& argc, char**& argv)
   return (bool) flag;
 }
 
+void parallelBranching::setupCommunicators(MPI_Comm comm_)
+{
+  ClusterObj worldCluster; // use to find pure hubs, then throw away
+  int worldRank, worldSize;
+  MPI_Comm_rank(comm_, &worldRank);
+  MPI_Comm_size(comm_, &worldSize);
+  
+  bool hubsWork = hubsDontWorkSize > clusterSize;
+  int fullClusterSize = !hubsWork + 
+	  (clusterSize - !hubsWork) * boundingGroupSize;
+  int clustersWanted = worldSize / fullClusterSize;
+  int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
+  worldCluster.reset(worldRank, worldSize, 0, clustersWanted,
+		  forceSeparateSize);
+ 
+  int inBoundingGroup = worldCluster.isFollower();
+  MPI_Comm boundingProcessors; // one for all pure hubs, one for people in bounding groups
+  MPI_Comm_split(comm_, inBoundingGroup, worldRank, &boundingProcessors);
+  int boundingProcessorsRank;
+  MPI_Comm_rank(boundingProcessors, &boundingProcessorsRank);
+  if (inBoundingGroup)
+  {
+    int groupNum = boundingProcessorsRank / boundingGroupSize;
+    MPI_Comm_split(boundingProcessors, groupNum, worldRank, &uMPI::boundComm); 
+  }
+  else
+  {
+    MPI_Comm_free(boundingProcessors);
+    boundingProcessors = MPI_COMM_NULL;
+  }
+  int isWorker = (boundingProcessorsRank % boundingGroupSize == 0); 
+  int notMinion = worldCluster.isLeader() || isWorker;
+  MPI_Comm headComm;
+  MPI_Comm_split(comm_, notMinion, worldRank, &headComm);
+  if (!notMinion)
+  {
+    MPI_Comm_free(headComm);
+    headComm = MPI_COMM_NULL;
+  }
+}
 
 // To broadcast a problem to all processors
 

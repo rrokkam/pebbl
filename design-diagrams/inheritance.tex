@@ -1,0 +1,65 @@
+\documentclass{minimal}
+\usepackage{tikz}
+\usetikzlibrary{positioning, shapes, shadows, arrows}
+
+\begin{document}
+
+\tikzstyle{abstract}=[rectangle, draw=black, rounded corners, fill=white, drop shadow,
+        text centered, anchor=north, text width=5cm]
+\tikzstyle{myarrow}=[->, >=open triangle 45]
+
+need to get around packing issue for the case where there is only one non-minion processor
+	-- want to avoid polluting the serial layer of PEBBL with MPI-related code
+
+say something about diamond inheritance
+Communicators - parBranchSerialBound and serialBranchParBound both have them (can't inherit mpiComm)
+
+\bigskip\bigskip
+
+\begin{center}
+\begin{tikzpicture}[node distance=2cm]
+
+    \node (serialBranchSerialBound) [abstract, rectangle split, rectangle split parts=2]
+        {
+            \textbf{serialBranchSerialBound}
+            \nodepart{second} current serial PEBBL Layer
+        };
+
+	\node (MPIAware) [abstract, rectangle split, rectangle split parts=2,
+	below=of serialBranchSerialBound]
+		{
+			\textbf{MPIAware}
+			\nodepart{second} (pure virtual) Include MPI, packing routines
+		};
+	\draw[myarrow] (MPIAware.north) -- (serialBranchSerialBound.south);
+
+	\node (Dummy) [text width=0.5cm, below=of MPIAware] {};
+
+	\node (parBranchSerialBound) [abstract, rectangle split, rectangle split parts=2, left=of Dummy]
+        {
+            \textbf{parBranchSerialBound}
+            \nodepart{second} current parallel PEBBL Layer, has "main" communicator
+        };
+    \draw[myarrow] (parBranchSerialBound.north) -- (MPIAware.south);
+
+    \node (serialBranchParBound) [abstract, rectangle split, rectangle split parts=2, right=of Dummy]
+        {
+            \textbf{serialBranchParBound}
+            \nodepart{second} Bounding communicator
+        };
+    \draw[myarrow] (serialBranchParBound.north) -- (MPIAware.south);
+
+    \node (parBranchParBound) [abstract, rectangle split, rectangle split parts=2, below=of Dummy]
+        {
+            \textbf{parBranchParBound}
+            \nodepart{second} Combining both of the above
+        };
+    \draw[myarrow] (parBranchParBound.north) -- (serialBranchParBound.south);
+    \draw[myarrow] (parBranchParBound.north) -- (parBranchSerialBound.south);
+
+    
+\end{tikzpicture}
+\end{center}
+
+\end{document}
+

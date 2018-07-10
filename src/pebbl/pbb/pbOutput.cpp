@@ -639,9 +639,9 @@ void parallelBranching::printConfiguration(ostream& stream)
   int mod  = uMPI::size % cluster.typicalSize;
   if (mod)
     stream << ": " << numHubs() - 1;
-  stream << " of size " << cluster.typicalSize;
+  stream << " with " << cluster.typicalSize << " worker" << plural(cluster.typicalSize);
   if (mod)
-    stream << ", 1 of size " << mod << " (not including minions)";
+    stream << ", 1 with " << mod << " worker" << plural(mod);
   stream << '\n';
   stream.width(pWidth);
   

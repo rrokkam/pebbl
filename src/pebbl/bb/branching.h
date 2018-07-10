@@ -1646,8 +1646,8 @@ void branchPool<SUB,LOAD>::clear()
 
 /// Guts of prepackaged serial main program
 
-template <class B> bool runSerial(int argc,char** argv,
-  MPI_Comm comm_=MPI_COMM_WORLD)
+template <class B> bool runSerial(int argc,char** argv
+  /*, MPI_Comm comm_=MPI_COMM_WORLD */)
 {
   B instance;
   // with parallel bounding, could cause issues with multiple printouts

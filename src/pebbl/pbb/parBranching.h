@@ -1636,7 +1636,7 @@ int driver(int argc, char** argv, MPI_Comm comm_=MPI_COMM_WORLD)
     if (parallel_exec_test<parallelBranching>(argc, argv, nproc))
       flag = runParallel<PB>(argc, argv, comm_);
     else
-      flag = runSerial<B>(argc, argv, comm_);
+      flag = runSerial<B>(argc, argv/*, comm_*/);
     uMPI::done();
   }
   STD_CATCH(CommonIO::end(); uMPI::done();)

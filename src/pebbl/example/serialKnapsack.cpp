@@ -249,6 +249,33 @@ void binKnapSolution::copy(binKnapSolution* toCopy)
 
 }
 
+#ifdef ACRO_HAVE_MPI
+MPI_Comm binKnapSub::boundComm = MPI_COMM_NULL;
+
+void binKnapSub::finish() {
+	if (boundComm == MPI_COMM_NULL) {
+		return;
+	}
+	int msg = -1;		
+	std::cout << "kill minions" << std::endl;
+	MPI_Bcast(&msg, 1, MPI_INT, 0, boundComm);
+}
+
+void binKnapSub::doBoundWork() {
+	if (boundComm == MPI_COMM_NULL) {
+		return;
+	}
+	int msg;
+	while(true) {
+		MPI_Bcast(&msg, 1, MPI_INT, 0, boundComm);
+		if (msg == -1)
+			return;
+		std::cout << "I'm a happy Worker" << std::endl;
+	}
+	return;
+}
+
+#endif
 
 void 
 binKnapSub::growList(IntVector& newList, IntVector& oldList, int newElement)
@@ -411,6 +438,12 @@ void binKnapSub::dumpLists(const char* extraString)
 
 void binKnapSub::boundComputation(double* controlParam) 
 {
+#ifdef ACRO_HAVE_MPI
+  if (boundComm != MPI_COMM_NULL) {
+    int msg = 1;
+    MPI_Bcast(&msg, 1, MPI_INT, 0, boundComm);
+  }
+#endif
   *controlParam = 1;
 
   DEBUGPR(200,dumpLists());

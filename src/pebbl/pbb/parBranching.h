@@ -1552,16 +1552,26 @@ utilib::UnPackBuffer& operator>>(utilib::UnPackBuffer& buf,
 namespace pebbl {
 
 
-static inline int argument_check(int argc, char** argv, char *argName, int defaultValue, int min)
+static inline int argument_check(int *argc, char** argv, const char *argName, 
+                                 int defaultValue, int min, bool remove)
 {
   int argValue;
-  for (int i=1; i<argc; i++) 
+  for (int i=1; i<*argc; i++) 
   {
     if (strncmp(argv[i], argName, strlen(argName)) == 0)
     {
       argValue = strtol(argv[i] + strlen(argName), NULL, 10);
+	  if (remove) {
+		  for (int j = i; j < *argc - 1; j++) {
+			  argv[j] = argv[j+1];
+		  }
+		  (*argc)--;
+		  argv[*argc] = (char *)0;
+	  }
       if (argValue < min)
         return defaultValue;
+      else
+        return argValue;
       break;
     }
   }
@@ -1572,19 +1582,6 @@ static inline int argument_check(int argc, char** argv, char *argName, int defau
 /// Define a static function that they can call to create bounding
 /// communicators that will align with PEBBL's hub allocation
 
-/*
- * This this code gets a little funky (doesn't work) when the numClusters
- * paramater forces smaller clusters than specified by the clusterSize parameter.
- * For now we are assuming that users will be smart about their parameter usage.
- * If this is a problem, I believe that replacing clustersWanted variable with the
- * numClusters parameter and changing line 38 of clustering.cpp to:
- *
- *    typicalSize = boundingGroupSize * 
- *       (int) ceil(((double) size)/(boundingGroupSize * std::max(clustersWanted,1)));
- *
- * is a simple fix, but we don't want to touch the cluster class without Jonathan's
- * permission.
- */
 int setupBoundingCommunicators(int clusterSize,
                                int hubsDontWorkSize,
 							   int boundingGroupSize,
@@ -1592,7 +1589,7 @@ int setupBoundingCommunicators(int clusterSize,
                                MPI_Comm *pebblComm,
 							   MPI_Comm *boundingComm);
 
-int setupBoundingCommunicators(int argc,
+int setupBoundingCommunicators(int *argc,
                                char **argv,
                                MPI_Comm baseComm,
                                MPI_Comm *pebblComm,
@@ -1614,14 +1611,15 @@ return false;
 
 /// Prepackaged parallel/serial main program
 
-template <class B,class PB> int driver(int argc, char** argv)
+template <class B,class PB>
+int driver(int argc, char** argv,MPI_Comm comm = MPI_COMM_WORLD)
 {
   bool flag = true;
 
   try 
     {
 
-      uMPI::init(&argc,&argv,MPI_COMM_WORLD);
+      uMPI::init(&argc,&argv,comm);
       int nprocessors = uMPI::size;
 
       if (parallel_exec_test<parallelBranching>(argc,argv,nprocessors)) 

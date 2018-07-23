@@ -1795,6 +1795,12 @@ int setupBoundingCommunicators(int clusterSize,
                                MPI_Comm *pebblComm,
 							   MPI_Comm *boundingComm)
 {
+	//special case when BGS = 1. Don't want to create a bunch of individual communicators
+	if (boundingGroupSize == 1) {
+		*pebblComm = baseComm;
+		*boundingComm = MPI_COMM_NULL;
+		return 0;
+	}
 	clusterObj worldCluster; // use to find pure hubs, then throw away
 	int ret, worldRank, worldSize;
 	if (ret = MPI_Comm_rank(baseComm, &worldRank)) {
@@ -1823,6 +1829,7 @@ int setupBoundingCommunicators(int clusterSize,
 	if (ret = MPI_Comm_rank(boundingProcessors, &boundingProcessorsRank)) {
 		return ret;
 	}
+
 
 	// form bounding groups out of intermediate processor
 	if (inBoundingGroup)
@@ -1855,22 +1862,21 @@ int setupBoundingCommunicators(int clusterSize,
  * seems hamfisted and is a large change that would need Jonathan's approval. More
  * thought could most likely yield a better solution.
  */
-int setupBoundingCommunicators(int argc,
+int setupBoundingCommunicators(int *argc,
                                char **argv,
                                MPI_Comm baseComm,
                                MPI_Comm *pebblComm,
                                MPI_Comm *boundingComm)
 {
-	int ret, clusterSize, hubsDontWorkSize, boundingGroupSize, arg;
+  int ret, clusterSize, hubsDontWorkSize, boundingGroupSize, arg;
 
   // hack to get the needed parameters before initialization
-  clusterSize = argument_check(argc, argv, "--clusterSize=", 64, 1);
-  boundingGroupSize = argument_check(argc, argv, "--boundingGroupSize=", 1, 1);
-  hubsDontWorkSize = argument_check(argc, argv, "--hubsDontWorkSize=", 10, 2);
-
-	ret = setupBoundingCommunicators(clusterSize, hubsDontWorkSize,
-			boundingGroupSize, baseComm, pebblComm, boundingComm);
-	return ret;
+  clusterSize = argument_check(argc, argv, "--clusterSize=", 64, 1, false);
+  boundingGroupSize = argument_check(argc, argv, "--boundingGroupSize=", 1, 1, true);
+  hubsDontWorkSize = argument_check(argc, argv, "--hubsDontWorkSize=", 10, 2, false);
+  ret = setupBoundingCommunicators(clusterSize, hubsDontWorkSize,
+	boundingGroupSize, baseComm, pebblComm, boundingComm);
+  return ret;
 }
 
 

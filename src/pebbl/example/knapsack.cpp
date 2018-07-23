@@ -25,7 +25,20 @@ typedef void parallelBinaryKnapsack;
 
 int main(int argc, char* argv[])
 {
-  return driver<binaryKnapsack,parallelBinaryKnapsack>(argc,argv);
+  int size, rank;
+  MPI_Init(&argc, &argv);
+  MPI_Comm pebblComm, boundComm;
+  pebbl::setupBoundingCommunicators(&argc, argv, MPI_COMM_WORLD, &pebblComm, &boundComm);
+  pebbl::binKnapSub::setBoundComm(boundComm); 
+  if (pebblComm == MPI_COMM_NULL){
+    pebbl::binKnapSub::doBoundWork();
+    MPI_Finalize();
+  } 
+  else {
+    return driver<binaryKnapsack,parallelBinaryKnapsack>(argc,argv,pebblComm);
+    pebbl::binKnapSub::finish();
+    MPI_Finalize();
+  }
 }
 
 

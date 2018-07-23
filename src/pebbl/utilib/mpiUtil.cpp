@@ -115,7 +115,7 @@ void uMPI::done()
 {
   if (size > 1) 
      CommonIO::end_tagging();
-  //MPI_Finalize();
+  MPI_Finalize();
 };
 
 

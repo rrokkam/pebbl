@@ -278,6 +278,15 @@ public binKnapParams
 {
 public:
 
+#ifdef ACRO_HAVE_MPI
+  MPI_Comm boundComm = MPI_COMM_NULL;
+
+  void endBounders();
+
+  void doBoundWork();
+
+#endif
+
   double capacity;
   int    numItems;
 
@@ -370,15 +379,6 @@ class binKnapSub :
 {
 public:
 
-#ifdef ACRO_HAVE_MPI
-  static MPI_Comm boundComm;
-
-  static void finish();
-
-  static void doBoundWork();
-
-  static void setBoundComm(MPI_Comm comm) { boundComm = comm; }
-#endif
 
   inline binaryKnapsack* global() const { return globalPtr; };
 

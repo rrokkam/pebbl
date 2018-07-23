@@ -1551,6 +1551,55 @@ utilib::UnPackBuffer& operator>>(utilib::UnPackBuffer& buf,
 
 namespace pebbl {
 
+
+static inline int argument_check(int argc, char** argv, char *argName, int defaultValue, int min)
+{
+  int argValue;
+  for (int i=1; i<argc; i++) 
+  {
+    if (strncmp(argv[i], argName, strlen(argName)) == 0)
+    {
+      argValue = strtol(argv[i] + strlen(argName), NULL, 10);
+      if (argValue < min)
+        return defaultValue;
+      break;
+    }
+  }
+  return defaultValue; 
+}
+
+
+/// Define a static function that they can call to create bounding
+/// communicators that will align with PEBBL's hub allocation
+
+/*
+ * This this code gets a little funky (doesn't work) when the numClusters
+ * paramater forces smaller clusters than specified by the clusterSize parameter.
+ * For now we are assuming that users will be smart about their parameter usage.
+ * If this is a problem, I believe that replacing clustersWanted variable with the
+ * numClusters parameter and changing line 38 of clustering.cpp to:
+ *
+ *    typicalSize = boundingGroupSize * 
+ *       (int) ceil(((double) size)/(boundingGroupSize * std::max(clustersWanted,1)));
+ *
+ * is a simple fix, but we don't want to touch the cluster class without Jonathan's
+ * permission.
+ */
+int setupBoundingCommunicators(int clusterSize,
+                               int hubsDontWorkSize,
+							   int boundingGroupSize,
+							   MPI_Comm baseComm,
+                               MPI_Comm *pebblComm,
+							   MPI_Comm *boundingComm);
+
+int setupBoundingCommunicators(int argc,
+                               char **argv,
+                               MPI_Comm baseComm,
+                               MPI_Comm *pebblComm,
+                               MPI_Comm *boundingComm);
+
+
+
 template <class ParBranchingType>
 inline bool parallel_exec_test(int argc, char** argv, int nproc)
 {

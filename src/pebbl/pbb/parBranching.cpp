@@ -1772,6 +1772,111 @@ void parallelBranching::cleanAbort()
 
 
 
+/// Define a static function that they can call to create bounding
+/// communicators that will align with PEBBL's hub allocation
+
+/*
+ * This this code gets a little funky (doesn't work) when the numClusters
+ * paramater forces smaller clusters than specified by the clusterSize parameter.
+ * For now we are assuming that users will be smart about their parameter usage.
+ * If this is a problem, I believe that replacing clustersWanted variable with the
+ * numClusters parameter and changing line 38 of clustering.cpp to:
+ *
+ *    typicalSize = boundingGroupSize * 
+ *       (int) ceil(((double) size)/(boundingGroupSize * std::max(clustersWanted,1)));
+ *
+ * is a simple fix, but we don't want to touch the cluster class without Jonathan's
+ * permission.
+ */
+int setupBoundingCommunicators(int clusterSize,
+                               int hubsDontWorkSize,
+							   int boundingGroupSize,
+							   MPI_Comm baseComm,
+                               MPI_Comm *pebblComm,
+							   MPI_Comm *boundingComm)
+{
+	clusterObj worldCluster; // use to find pure hubs, then throw away
+	int ret, worldRank, worldSize;
+	if (ret = MPI_Comm_rank(baseComm, &worldRank)) {
+		return ret;
+	}
+	if (ret = MPI_Comm_size(baseComm, &worldSize)) {
+		return ret;
+	}
+	
+	// calculate the desired size of a cluster including bounding processors
+	bool hubsWork = hubsDontWorkSize > clusterSize;
+	int fullClusterSize = !hubsWork +
+		(clusterSize - !hubsWork) * boundingGroupSize;
+	int clustersWanted = worldSize / fullClusterSize;
+	int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
+	worldCluster.reset(worldRank, worldSize, fullClusterSize, clustersWanted,
+			forceSeparateSize);
+
+	// create an intermediate communicator that excludes pure hubs
+	int inBoundingGroup = worldCluster.isFollower(worldRank);
+	MPI_Comm boundingProcessors;
+	if (ret = MPI_Comm_split(baseComm, inBoundingGroup, worldRank, &boundingProcessors)) {
+		return ret;
+	}
+	int boundingProcessorsRank;
+	if (ret = MPI_Comm_rank(boundingProcessors, &boundingProcessorsRank)) {
+		return ret;
+	}
+
+	// form bounding groups out of intermediate processor
+	if (inBoundingGroup)
+	{
+		int groupNum = boundingProcessorsRank / boundingGroupSize;
+		if (ret = MPI_Comm_split(boundingProcessors, groupNum, worldRank, boundingComm)) {
+			return ret;
+		}
+	}
+	MPI_Comm_free(&boundingProcessors);
+
+	// Determine pebbl head processors
+	int isWorker = (boundingProcessorsRank % boundingGroupSize == 0);
+	int isMinion = !worldCluster.isLeader(worldRank) && !isWorker;
+	MPI_Comm_split(baseComm, !isMinion, worldRank, pebblComm);
+	if (isMinion)
+	{
+		MPI_Comm_free(pebblComm);
+		*pebblComm = MPI_COMM_NULL;
+	}
+	return 0;
+}
+
+/*
+ * WL: The defaults are tightly coupled to the default values of their corresponding
+ * parameters in the parallel layer. Changing one without the other will break 
+ * parallel bounding. There is currently no way to get these parameters without a
+ * pebbl object, but it is necessary to call this function before a pebbl object is
+ * created. Rohith and I discussed making the pebbl default params static, but that 
+ * seems hamfisted and is a large change that would need Jonathan's approval. More
+ * thought could most likely yield a better solution.
+ */
+int setupBoundingCommunicators(int argc,
+                               char **argv,
+                               MPI_Comm baseComm,
+                               MPI_Comm *pebblComm,
+                               MPI_Comm *boundingComm)
+{
+	int ret, clusterSize, hubsDontWorkSize, boundingGroupSize, arg;
+
+  // hack to get the needed parameters before initialization
+  clusterSize = argument_check(argc, argv, "--clusterSize=", 64, 1);
+  boundingGroupSize = argument_check(argc, argv, "--boundingGroupSize=", 1, 1);
+  hubsDontWorkSize = argument_check(argc, argv, "--hubsDontWorkSize=", 10, 2);
+
+	ret = setupBoundingCommunicators(clusterSize, hubsDontWorkSize,
+			boundingGroupSize, baseComm, pebblComm, boundingComm);
+	return ret;
+}
+
+
+
+
+
 } // namespace pebbl
 
 #endif

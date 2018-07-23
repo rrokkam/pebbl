@@ -45,7 +45,8 @@ public:
 	     int size_,
 	     int sizeWanted,
 	     int clustersWanted,
-	     int forceSeparateSize);
+	     int forceSeparateSize,
+		 int boundingGroupSize);
 
   int rank;
   int size;
@@ -178,12 +179,13 @@ void clusterObj::reset(int rank_,
 		       int size_,
 		       int sizeWanted,
 		       int clustersWanted,
-		       int forceSeparateSize)
+		       int forceSeparateSize,
+			   int boundingGroupSize)
 {
   rank = rank_;
   size = size_;
 
-  typicalSize = (int) ceil(((double) size)/std::max(clustersWanted,1));
+  typicalSize = (int) boundingGroupSize * ceil(((double) size)/(boundingGroupSize * std::max(clustersWanted,1)));
   if (typicalSize > sizeWanted)
     typicalSize = sizeWanted;
   if (typicalSize < 1)
@@ -224,7 +226,8 @@ namespace uMPI {
 void setupCommunicators(MPI_Comm comm_,
 		int hubsDontWorkSize,
 		int clusterSize,
-		int boundingGroupSize)
+		int boundingGroupSize,
+		int minClusters)
 {
   int headRank = -1;
   int boundRank = -1;
@@ -239,8 +242,8 @@ void setupCommunicators(MPI_Comm comm_,
 	  (clusterSize - !hubsWork) * boundingGroupSize;
   int clustersWanted = worldSize / fullClusterSize;
   int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
-  worldCluster.reset(worldRank, worldSize, fullClusterSize, clustersWanted,
-		  forceSeparateSize);
+  worldCluster.reset(worldRank, worldSize, fullClusterSize, minClusters, 
+		  forceSeparateSize, boundingGroupSize);
  
   int inBoundingGroup = worldCluster.isFollower();
   MPI_Comm boundingProcessors; // one for all pure hubs, one for people in bounding groups
@@ -294,15 +297,16 @@ int main (int argc, char **argv)
 
   if (argc < 4)
   {
-    std::cout << "USAGE: hubsDontWorkSize clusterSize boundingGroupSize" << std::endl;
+    std::cout << "USAGE: hubsDontWorkSize clusterSize boundingGroupSize numClusters" << std::endl;
     return 1;
   }
   
   int hubsDontWorkSize = strtol(argv[1], NULL, 10);
   int clusterSize = strtol(argv[2], NULL, 10);
   int boundingGroupSize = strtol(argv[3], NULL, 10);
+  int numClusters = strtol(argv[4], NULL, 10);
   
-  setupCommunicators(MPI_COMM_WORLD, hubsDontWorkSize, clusterSize, boundingGroupSize);
+  setupCommunicators(MPI_COMM_WORLD, hubsDontWorkSize, clusterSize, boundingGroupSize, numClusters);
   
   MPI_Finalize();
   return 0;

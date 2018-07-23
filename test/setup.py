@@ -6,7 +6,7 @@ def findindex(a):
 
 call(['mpic++', '-g', 'testSetupCommunicators.cpp', '-o', 'split'])
 with open('tmp.txt', 'w') as f:
-	call(['mpirun', '-np', argv[1], './split', argv[2], argv[3], argv[4]], stdout=f)
+	call(['mpirun', '-np', argv[1], './split', argv[2], argv[3], argv[4], argv[5]], stdout=f)
 
 with open('tmp.txt', 'r') as f:  # move cursor to beginning of file
 	lines = f.readlines()

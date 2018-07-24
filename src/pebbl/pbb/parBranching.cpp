@@ -197,7 +197,7 @@ void parallelBranching::reset(bool VBFlag)
 
   // Set up cluster tracking
 
-  cluster.reset(uMPI::rank, uMPI::size, clusterSize, numClusters, 
+  cluster.reset(myRank(), mySize(), clusterSize, numClusters, 
 		hubsDontWorkSize);
 
   // Initialize outgoing buffer objects
@@ -360,7 +360,7 @@ void parallelBranching::reset(bool VBFlag)
   if (qualityBalance && (depthFirst || breadthFirst))
     {
       qualityBalance = false;
-      if (uMPI::iDoIO && parameter_initialized("qualityBalance"))
+      if (iDoIO() && parameter_initialized("qualityBalance"))
 	{
 	  CommonIO::end_tagging();
 	  ucout << "\nQuality balancing inhibited because "
@@ -370,7 +370,7 @@ void parallelBranching::reset(bool VBFlag)
     }
 
   if (rebalLoadFac < highLoadFac)
-    if (uMPI::iDoIO)
+    if (iDoIO())
       {
 	CommonIO::end_tagging();
 	ucout << "\n*** Warning *** rebalLoadFac=" << rebalLoadFac
@@ -380,7 +380,7 @@ void parallelBranching::reset(bool VBFlag)
 
   if (minScatterProb > targetScatterProb)
     {
-      if (uMPI::iDoIO)
+      if (iDoIO())
 	{
 	  CommonIO::end_tagging();
 	  ucout << "\nParameter minScatterProb=" << minScatterProb
@@ -393,7 +393,7 @@ void parallelBranching::reset(bool VBFlag)
 
   if (maxScatterProb < targetScatterProb)
     {
-      if (uMPI::iDoIO)
+      if (iDoIO())
 	{
 	  CommonIO::end_tagging();
 	  ucout << "\nParameter maxScatterProb=" << maxScatterProb
@@ -406,7 +406,7 @@ void parallelBranching::reset(bool VBFlag)
 
   if (logTransitions && (loadLogSeconds == 0))
     {
-      if (uMPI::iDoIO)
+      if (iDoIO())
 	{
 	  CommonIO::end_tagging();
 	  ucout << "Parameter logTransitions meaningless if loadLogSeconds"
@@ -475,7 +475,10 @@ void parallelBranching::reset(bool VBFlag)
 
       if (reposTree)
 	delete reposTree;
-      reposTree = new nAryTreeRememberParent(reposTreeRadix);
+      reposTree = new nAryTreeRememberParent(reposTreeRadix,
+                                             0,
+                                             myRank(),
+                                             mySize());
       reposChildren = reposTree->numChildren();
 
       childReposArray.resize(reposChildren);
@@ -508,7 +511,7 @@ void parallelBranching::reset(bool VBFlag)
 
       if (enumFlowControl)
 	{
-	  nProcessorBits = bitWidth(uMPI::size - 1);
+	  nProcessorBits = bitWidth(mySize() - 1);
 	  solJustSent.resize(nProcessorBits);
 	  solSendQ.resize(nProcessorBits);
 	  
@@ -573,11 +576,21 @@ void parallelBranching::reset(bool VBFlag)
 // Constructor for parallel branching class.  Sets threads to null.
 // Most of the stuff that used to be here is now in reset().
 
-parallelBranching::parallelBranching() :
+parallelBranching::parallelBranching(MPI_Comm comm_) :
   currentParSP(NULL),
   heapOfWorkers("Worker Tracking"),
   qHeapOfWorkers("Worker Quality Tracking"),
-  reposArrayHeap("Repository Array")
+  reposArrayHeap("Repository Array"),
+  mpiComm(comm_),
+  workerOutQ(mpiCommObj()),           // All these buffer queues need communicator
+  deliverSPBuffers(mpiCommObj()),     //   information
+  auxDeliverSPQ(mpiCommObj()),
+  dispatchSPBuffers(mpiCommObj()),
+  hubAuxBufferQ(mpiCommObj()),
+  solHashQ(mpiCommObj()),
+  reposArrayQ(mpiCommObj()),
+  newLastSolQ(mpiCommObj()),
+  solAckQ(mpiCommObj())
 {
   workerPool = NULL;
   hubPool    = NULL;
@@ -821,13 +834,13 @@ double parallelBranching::parallelSearchFramework(parSPHandler* handler_)
     {
       readingCheckpoint = true;
 
-      if (uMPI::rank == uMPI::ioProc)
+      if (iDoIO())
 	ucout << "Trying to restart from checkpoint\n\n";
       ucout.flush();
 
       restarted = restartFromCheckpoint();
 
-      if (uMPI::rank == uMPI::ioProc)
+      if (iDoIO())
 	{
 	  if (restarted)
 	    ucout << "Checkpoint loaded successfully.\n";
@@ -879,20 +892,21 @@ double parallelBranching::parallelSearchFramework(parSPHandler* handler_)
   IF_LOGGING_EVENTS(1,finishEventLog(););
 
   if (checkpointNumber > 0)
-    deleteCheckpointFile(checkpointNumber,uMPI::rank);
+    deleteCheckpointFile(checkpointNumber,myRank());
 
   if (validateLog)
     {
-      if (uMPI::rank == 0)
+      if (myRank() == 0)
 	valLogFathomPrint();
       delete vout;
     }
 
-  uMPI::barrier();   // Safety check to make sure that all processors think
+  barrier();         // Safety check to make sure that all processors think
                      // they're done before trying to call the destructor
                      // on any processor.
 
-
+  applicCommFinish();
+  
   return incumbentValue;
 };
 
@@ -1020,8 +1034,8 @@ void parallelBranching::placeTasks()
 
   if (iAmWorker())
     {
-      knownBufferSize.resize(uMPI::size);
-      for (int i=0; i<uMPI::rank; i++)
+      knownBufferSize.resize(mySize());
+      for (int i=0; i < myRank(); i++)
 	knownBufferSize[i] = spReceiver->sizeOfBuffer();
       DEBUGPR(100,ucout <<"Initialized knownBufferSize to " 
 	      << spReceiveBuf << '/' << knownBufferSize[0] << endl);
@@ -1055,7 +1069,7 @@ void parallelBranching::placeTasks()
 	}
     }
 
-  if ((loadLogSeconds > 0) && (loadLogWriteSeconds > 0) && (uMPI::size > 1))
+  if ((loadLogSeconds > 0) && (loadLogWriteSeconds > 0) && (mySize() > 1))
     {
       llChainer = new llChainObj(this);
       placeTask(llChainer,true,highPriorityGroup);
@@ -1104,7 +1118,7 @@ bool parallelBranching::setup(int& argc, char**& argv)
   // The I/O processor reads the problem as in serial.
   // The others just initialize timers and set up parameters.
 
-  if (uMPI::iDoIO)
+  if (iDoIO())
     {
       try
         {
@@ -1135,16 +1149,16 @@ bool parallelBranching::setup(int& argc, char**& argv)
 
   if (stallForDebug) 
     {
-      ucout << "MPI Rank " << uMPI::rank << " = " << getpid() << std::endl 
-	    << utilib::Flush;
-      uMPI::barrier();
-      if (uMPI::iDoIO) 
+      ucout << "MPI Rank " << uMPI::rank << '/' << myRank() << " = " 
+            << getpid() << std::endl << utilib::Flush;
+      barrier();
+      if (iDoIO()) 
 	{
 	  ucout << "Type <Enter> to continue: " << Flush;
 	  char staller;
 	  cin.get(staller);
 	}
-      uMPI::barrier();
+      barrier();
     }
 
   // The debugSeqDigits parameter needs extra processing 
@@ -1153,7 +1167,7 @@ bool parallelBranching::setup(int& argc, char**& argv)
 
   // Broadcast the read-in success flag to everbody
 
-  uMPI::broadcast(&flag,1,MPI_INT,uMPI::ioProc);
+  broadcast(&flag,1,MPI_INT,myIoProc());
 
   // If things worked, broadcast the problem to everybody
 
@@ -1168,44 +1182,44 @@ bool parallelBranching::setup(int& argc, char**& argv)
 
 void parallelBranching::broadcastProblem()
 {
-  if (uMPI::size == 1)
+  if (mySize() == 1)
     return;
 
   double startBroadcastTime = CPUSeconds();
   double startBroadcastWCTime = WallClockSeconds();
 
-  if(uMPI::iDoIO)                   // If we are the special IO processor
+  if(iDoIO())                   // If we are the special IO processor
     {
       PackBuffer outBuf(8192);             // Pack everything into a buffer.
       packAll(outBuf);
       int probSize = outBuf.size();        // Figure out length.
       DEBUGPR(70,ucout << "Broadcast size is " << probSize << " bytes.\n");
-      uMPI::broadcast(&probSize,          // Broadcast length.
-		      1,
-		      MPI_INT,
-		      uMPI::ioProc);
-      uMPI::broadcast((void*) outBuf.buf(), // Now broadcast buffer itself.
-		      probSize,
-		      MPI_PACKED,
-		      uMPI::ioProc);
+      broadcast(&probSize,          // Broadcast length.
+		1,
+		MPI_INT,
+		myIoProc());
+      broadcast((void*) outBuf.buf(), // Now broadcast buffer itself.
+		probSize,
+		MPI_PACKED,
+		myIoProc());
     }
 
   else   // On the other processors, we receive the same information...
 
     {
       int probSize;                          // Get length of buffer
-      uMPI::broadcast(&probSize,             // we're going to get.
-		      1,
-		      MPI_INT,
-		      uMPI::ioProc);
+      broadcast(&probSize,             // we're going to get.
+		1,
+		MPI_INT,
+		myIoProc());
       DEBUGPR(70,ucout << "Received broadcast size is " << probSize << 
 	      " bytes.\n");
       UnPackBuffer inBuf(probSize);          // Create a big enough
       inBuf.reset(probSize);                 // temporary buffer.
-      uMPI::broadcast((void *) inBuf.buf(),  // Get the data...
-		      probSize,
-		      MPI_PACKED,
-		      uMPI::ioProc);
+      broadcast((void *) inBuf.buf(),  // Get the data...
+		probSize,
+		MPI_PACKED,
+		myIoProc());
       DEBUGPR(100,ucout << "Broadcast received.\n");
       unpackAll(inBuf);                      // ... and unpack it.
       DEBUGPR(100,ucout << "Unpack seems successful.\n");
@@ -1214,7 +1228,7 @@ void parallelBranching::broadcastProblem()
   broadcastTime   += CPUSeconds() - startBroadcastTime;
   broadcastWCTime += WallClockSeconds() - startBroadcastWCTime;
 
-  broadcastMessageCount += 2*(uMPI::rank > 0);
+  broadcastMessageCount += 2*(myRank() > 0);
 
   DEBUGPR(70,ucout << "Problem broadcast done.\n");
 
@@ -1234,22 +1248,21 @@ void parallelBranching::rampUpIncumbentSync()
   if (sense == maximization)    // Change if maximization
     reduceOp = MPI_MAX;
   double bestIncumbent = sense*MAXDOUBLE;
-
-  uMPI::reduceCast(&incumbentValue,&bestIncumbent,1,MPI_DOUBLE,reduceOp);
+  reduceCast(&incumbentValue,&bestIncumbent,1,MPI_DOUBLE,reduceOp);
   DEBUGPR(100,ucout << "Got value " << bestIncumbent << endl);
 
-  int sourceRank = uMPI::size;
+  int sourceRank = mySize();
   if (incumbentValue == bestIncumbent)
     sourceRank = incumbentSource;
   int lowestRank = 0;
-  uMPI::reduceCast(&sourceRank,&lowestRank,1,MPI_INT,MPI_MIN);
+  reduceCast(&sourceRank,&lowestRank,1,MPI_INT,MPI_MIN);
   DEBUGPR(100,ucout << "Got source " << lowestRank << endl);
 
   if (bestIncumbent != incumbentValue)
     {
       needPruning = true;
       newIncumbentEffect(bestIncumbent);
-      if ((uMPI::rank == 0) && trackIncumbent)
+      if ((myRank() == 0) && trackIncumbent)
 	ucout << "New incumbent found: value=" << bestIncumbent
 	      << ", source=" << lowestRank
 	      << ", time=" << CPUSeconds() - baseTime 
@@ -1259,13 +1272,13 @@ void parallelBranching::rampUpIncumbentSync()
   incumbentValue  = bestIncumbent;
   incumbentSource = lowestRank;
 
-  if (uMPI::rank != incumbentSource)
+  if (myRank() != incumbentSource)
      resetIncumbent();
 
   DEBUGPR(100,ucout << "Leaving rampUpIncumbentSync(): value=" 
 	  << incumbentValue << ", source=" << incumbentSource << endl);
 
-  if (uMPI::rank > 0)
+  if (myRank() > 0)
     rampUpMessages += 4;
 
   // If enumerating, then things are much hairier
@@ -1297,7 +1310,7 @@ void parallelBranching::rampUpSearch()
   while((spCount() > 0) && keepRampingUp())
     {
       processSubproblem();
-      if (uMPI::rank == 0)
+      if (myRank() == 0)
 	{
 	  loadObject lo = updatedPLoad();
 	  statusPrint(workerLastPrint,workerLastPrintTime,lo,"r");
@@ -1347,12 +1360,12 @@ void parallelBranching::rampUpSearch()
   // to the rank of the previous subproblem, modulo the total number
   // of workers.
 
-  int trialSkip = typicalClusterSize() - typicalHubsPure() + uMPI::rank;
+  int trialSkip = typicalClusterSize() - typicalHubsPure() + myRank();
   if (gcd(trialSkip,totalWorkers()) != 1)  // If not relatively prime, 
     trialSkip = totalWorkers() + 1;        // use a big number
   int skipFactor = -1;
-  uMPI::reduceCast(&trialSkip,&skipFactor,1,MPI_INT,MPI_MIN); // Find smallest
-  rampUpMessages += (uMPI::rank != uMPI::ioProc);
+  reduceCast(&trialSkip,&skipFactor,1,MPI_INT,MPI_MIN); // Find smallest
+  rampUpMessages += (!iDoIO());
   DEBUGPR(2,ucout << "Crossover skip factor is " << skipFactor << endl);
 
   // Rank of current worker within all workers.  Start with 0, then
@@ -1380,7 +1393,7 @@ void parallelBranching::rampUpSearch()
       // count the subproblem in the clusterLoad and perhaps the hub
       // information
 
-      if (whichCluster(procRank) == whichCluster(uMPI::rank))
+      if (whichCluster(procRank) == whichCluster(myRank()))
 	{
 	  clusterLoad += *sp;
 	  DEBUGPR(100,ucout << "My cluster, load " << clusterLoad << endl);
@@ -1397,7 +1410,7 @@ void parallelBranching::rampUpSearch()
       // If this is the worker processor owning the subproblem,
       // save it in the temporary pool; otherwise, discard.
 
-      if (procRank == uMPI::rank)
+      if (procRank == myRank())
 	{
 	  DEBUGPR(100,ucout << "Keeping...\n");
 	  tempPool.insert(sp);
@@ -1429,7 +1442,7 @@ void parallelBranching::rampUpSearch()
 
   rampUpBounds = subCount[bounded];
 
-  if (uMPI::rank > 0)
+  if (myRank() > 0)
     probCounter = 0;
  
   if (!veryFirstWorker())
@@ -1569,8 +1582,8 @@ spToken::spToken(parallelBranchSub* sp,int childNum,int childCount) :
 {
   if (!sp->canTokenize())
     EXCEPTION_MNGR(runtime_error, "Attempt to make a token from a subproblem "
-		"for which canTokenize() == false");
-  spProcessor         = uMPI::rank;
+		   "for which canTokenize() == false");
+  spProcessor         = sp->pGlobal()->myRank();
   whichChild          = childNum;
   memAddress          = sp;
   childrenRepresented = childCount;
@@ -1679,8 +1692,8 @@ void parallelBranching::setHubBusyFractions()
 					    1,
 					    globalLoad.lastHubTrack);
 
-  adjustedWorkerCount = uMPI::size - nminus1*typicalHubBusyFraction
-                                   - lastHubBusyFraction;
+  adjustedWorkerCount = mySize() - nminus1*typicalHubBusyFraction
+                                 - lastHubBusyFraction;
 
   DEBUGPR(100,ucout << "typicalHubBusyFraction=" << typicalHubBusyFraction
 	  << " lastHubBusyFraction=" << lastHubBusyFraction
@@ -1752,6 +1765,10 @@ hubAuxBufferQ.clear();
 
 void parallelBranching::cleanAbort()
 {
+  // Any application-dependent clean-up
+
+  applicCommFinish();
+
   // Clean up validation logs.
 
   if (validateLog)

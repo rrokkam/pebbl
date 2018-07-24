@@ -29,8 +29,10 @@ if(knapsack_test_dir)
 endif()
 
 if(enable_mpi)
- add_executable(parBoundTest parBoundTest.cpp parKnapsack.cpp serialKnapsack.cpp)
- target_link_libraries(parBoundTest pebbl)
+  add_executable(parBoundTest parBoundTest.cpp parKnapsack.cpp serialKnapsack.cpp)
+  target_link_libraries(parBoundTest pebbl)
+  add_executable(commTest commTest.cpp parKnapsack.cpp serialKnapsack.cpp)
+  target_link_libraries(commTest pebbl)
 endif()
 
 add_executable(lipshitzian lipshitzian.cpp)

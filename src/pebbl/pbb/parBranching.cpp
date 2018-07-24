@@ -723,6 +723,7 @@ void parallelBranching::solve()
   double run_start = CPUSeconds();
   double run_WC_start = WallClockSeconds();
 
+
   parallelBranching::search();
 
   searchTime = CPUSeconds() - run_start;
@@ -890,6 +891,7 @@ double parallelBranching::parallelSearchFramework(parSPHandler* handler_)
   uMPI::barrier();   // Safety check to make sure that all processors think
                      // they're done before trying to call the destructor
                      // on any processor.
+
 
   return incumbentValue;
 };
@@ -1232,6 +1234,7 @@ void parallelBranching::rampUpIncumbentSync()
   if (sense == maximization)    // Change if maximization
     reduceOp = MPI_MAX;
   double bestIncumbent = sense*MAXDOUBLE;
+
   uMPI::reduceCast(&incumbentValue,&bestIncumbent,1,MPI_DOUBLE,reduceOp);
   DEBUGPR(100,ucout << "Got value " << bestIncumbent << endl);
 
@@ -1847,7 +1850,7 @@ int setupBoundingCommunicators(int clusterSize,
 	MPI_Comm_split(baseComm, !isMinion, worldRank, pebblComm);
 	if (isMinion)
 	{
-	cout << worldRank << endl;
+		cout << worldRank << endl;
 		MPI_Comm_free(pebblComm);
 		*pebblComm = MPI_COMM_NULL;
 	}

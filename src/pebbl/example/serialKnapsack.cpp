@@ -57,7 +57,6 @@ void binaryKnapsack::endBounders() {
 		return;
 	}
 	int msg = -1;		
-	std::cout << "kill minions" << std::endl;
 	MPI_Bcast(&msg, 1, MPI_INT, 0, boundComm);
 }
 
@@ -438,6 +437,7 @@ void binKnapSub::dumpLists(const char* extraString)
 void binKnapSub::boundComputation(double* controlParam) 
 {
 #ifdef ACRO_HAVE_MPI
+
   if (global()->boundComm != MPI_COMM_NULL) {
     int msg = 1;
     MPI_Bcast(&msg, 1, MPI_INT, 0, global()->boundComm);

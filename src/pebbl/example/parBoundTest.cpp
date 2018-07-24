@@ -26,7 +26,7 @@ typedef void parallelBinaryKnapsack;
 int main(int argc, char* argv[])
 {
 #ifdef ACRO_HAVE_MPI
-	uMPI::init(&argc,&argv,MPI_COMM_WORLD);
+	MPI_Init(&argc, &argv);
 	CommonIO::begin();
 	CommonIO::setIOFlush(1);
 	CommonIO::begin_tagging();
@@ -39,8 +39,8 @@ int main(int argc, char* argv[])
 	int pebblCommSize;
 	if (pebblComm != MPI_COMM_NULL) {
 		pebblProc = true;
+		uMPI::init(&argc, &argv, pebblComm);
 		MPI_Comm_size(pebblComm, &pebblCommSize);
-	//cout << pebblCommSize << endl;
 	}
 	if (pebblProc && pebblCommSize == 1) {
 		binaryKnapsack instance;
@@ -54,8 +54,6 @@ int main(int argc, char* argv[])
 			instance.solve();
 			instance.endBounders();
 		}
-		CommonIO::end();
-		uMPI::done();
 	}
 	else if (pebblProc) {
 		parallelBinaryKnapsack instance;
@@ -70,16 +68,14 @@ int main(int argc, char* argv[])
 			instance.solve();
 			instance.endBounders();
 		}
-		CommonIO::end();
-		uMPI::done();
 	}
 	else {
 		binaryKnapsack instance;
 		instance.boundComm = boundingComm;
 		instance.doBoundWork();
-		CommonIO::end();
-		uMPI::done();
 	}
+	CommonIO::end();
+	uMPI::done();
 #endif
 	return 0;
 }

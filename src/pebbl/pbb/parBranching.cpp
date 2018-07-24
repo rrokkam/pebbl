@@ -1850,7 +1850,6 @@ int setupBoundingCommunicators(int clusterSize,
 	MPI_Comm_split(baseComm, !isMinion, worldRank, pebblComm);
 	if (isMinion)
 	{
-		cout << worldRank << endl;
 		MPI_Comm_free(pebblComm);
 		*pebblComm = MPI_COMM_NULL;
 	}

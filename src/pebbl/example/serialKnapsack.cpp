@@ -17,6 +17,8 @@
 // Jonathan Eckstein
 //
 
+#include <unistd.h>  // for sleeping in dummy parBound
+
 #include <pebbl_config.h>
 #include <pebbl/utilib/exception_mngr.h>
 #include <pebbl/utilib/GenericHeap.h>
@@ -69,7 +71,7 @@ void binaryKnapsack::doBoundWork() {
 		MPI_Bcast(&msg, 1, MPI_INT, 0, boundComm);
 		if (msg == -1)
 			return;
-		std::cout << "I'm a happy Worker" << std::endl;
+		usleep(10);
 	}
 	return;
 }

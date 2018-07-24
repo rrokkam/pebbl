@@ -30,12 +30,15 @@ void clusterObj::reset(int rank_,
 		       int size_,
 		       int sizeWanted,
 		       int clustersWanted,
-		       int forceSeparateSize)
+		       int forceSeparateSize,
+		       int boundingGroupSize)
 {
   rank = rank_;
   size = size_;
 
-  typicalSize = (int) ceil(((double) size)/std::max(clustersWanted,1));
+  // workersPerCluster includes both the followers and the bounding minions
+  int workersPerCluster = std::max(clustersWanted,1) * boundingGroupSize; 
+  typicalSize = boundingGroupSize * (int) ceil(((double) size)/workersPerCluster);
   if (typicalSize > sizeWanted)
     typicalSize = sizeWanted;
   if (typicalSize < 1)

@@ -38,7 +38,8 @@ public:
 	     int size_,
 	     int sizeWanted,
 	     int clustersWanted,
-	     int forceSeparateSize);
+	     int forceSeparateSize,
+	     int boundingGroupSize = 1);
 
   int rank;
   int size;

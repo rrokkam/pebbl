@@ -39,15 +39,12 @@ int main(int argc, char* argv[])
 	int pebblCommSize;
 	if (pebblComm != MPI_COMM_NULL) {
 		pebblProc = true;
-		uMPI::init(&argc, &argv, pebblComm);
 		MPI_Comm_size(pebblComm, &pebblCommSize);
 	}
 	if (pebblProc && pebblCommSize == 1) {
 		binaryKnapsack instance;
 		instance.boundComm = boundingComm;
-		utilib::exception_mngr::set_stack_trace(false);
 		bool flag = instance.setup(argc,argv);
-		utilib::exception_mngr::set_stack_trace(true);
 		if (flag)
 		{
 			instance.reset();
@@ -56,11 +53,9 @@ int main(int argc, char* argv[])
 		}
 	}
 	else if (pebblProc) {
-		parallelBinaryKnapsack instance;
+		parallelBinaryKnapsack instance(pebblComm);
 		instance.boundComm = boundingComm;
-		utilib::exception_mngr::set_stack_trace(false);
 		bool flag = instance.setup(argc,argv);
-		utilib::exception_mngr::set_stack_trace(true);
 		if (flag)
 		{
 			instance.reset();

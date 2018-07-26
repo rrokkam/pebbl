@@ -101,12 +101,6 @@ parallelPebblParams::parallelPebblParams()
 		"Parallel Search",
 		ParameterLowerBound<int>(1));
 
-  numClusters=1;
-  create_categorized_parameter("numClusters",numClusters,"<int>","1",
-		"Forces a minimum number of clusters",
-		"Parallel Search",
-		ParameterLowerBound<int>(1));
-
   hubsDontWorkSize=10;
   create_categorized_parameter("hubsDontWorkSize",hubsDontWorkSize,"<int>","10",
 		"Size of cluster above which hubs\n\t"

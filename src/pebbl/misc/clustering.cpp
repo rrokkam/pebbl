@@ -29,21 +29,12 @@ namespace pebbl {
 void clusterObj::reset(int rank_,
 		       int size_,
 		       int sizeWanted,
-		       int clustersWanted,
-		       int forceSeparateSize,
-		       int boundingGroupSize)
+		       int forceSeparateSize)
 {
   rank = rank_;
   size = size_;
 
-  // workersPerCluster includes both the followers and the bounding minions
-  int workersPerCluster = std::max(clustersWanted,1) * boundingGroupSize; 
-  typicalSize = boundingGroupSize * (int) ceil(((double) size)/workersPerCluster);
-  if (typicalSize > sizeWanted)
-    typicalSize = sizeWanted;
-  if (typicalSize < 1)
-    typicalSize = 1;
-
+  typicalSize = std::min(size, sizeWanted);
   numClusters = (int) ceil(((double) size)/typicalSize);
 
   clusterNumber   = rank/typicalSize;

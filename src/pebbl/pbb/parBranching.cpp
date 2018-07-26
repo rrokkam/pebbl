@@ -197,8 +197,7 @@ void parallelBranching::reset(bool VBFlag)
 
   // Set up cluster tracking
 
-  cluster.reset(myRank(), mySize(), clusterSize, numClusters, 
-		hubsDontWorkSize);
+  cluster.reset(myRank(), mySize(), clusterSize, hubsDontWorkSize);
 
   // Initialize outgoing buffer objects
   // Hold two tokens and two acks
@@ -1810,10 +1809,10 @@ void parallelBranching::cleanAbort()
  */
 int setupBoundingCommunicators(int clusterSize,
                                int hubsDontWorkSize,
-							   int boundingGroupSize,
-							   MPI_Comm baseComm,
+                               int boundingGroupSize,
+                               MPI_Comm baseComm,
                                MPI_Comm *pebblComm,
-							   MPI_Comm *boundingComm)
+                               MPI_Comm *boundingComm)
 {
 	//special case when BGS = 1. Don't want to create a bunch of individual communicators
 	if (boundingGroupSize == 1) {
@@ -1836,8 +1835,7 @@ int setupBoundingCommunicators(int clusterSize,
 		(clusterSize - !hubsWork) * boundingGroupSize;
 	int clustersWanted = worldSize / fullClusterSize;
 	int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
-	worldCluster.reset(worldRank, worldSize, fullClusterSize, clustersWanted,
-			forceSeparateSize);
+	worldCluster.reset(worldRank, worldSize, fullClusterSize, forceSeparateSize);
 
 	// create an intermediate communicator that excludes pure hubs
 	int inBoundingGroup = worldCluster.isFollower(worldRank);

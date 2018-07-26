@@ -51,7 +51,6 @@ public:
   // Control parameters for clustering.
 
   int clusterSize;
-  int numClusters;
   int hubsDontWorkSize;
 
   // Default thread control, priorities, and timeslices.

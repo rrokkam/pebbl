@@ -197,8 +197,7 @@ void parallelBranching::reset(bool VBFlag)
 
   // Set up cluster tracking
 
-  cluster.reset(myRank(), mySize(), clusterSize, numClusters, 
-		hubsDontWorkSize);
+  cluster.reset(myRank(), mySize(), clusterSize, hubsDontWorkSize);
 
   // Initialize outgoing buffer objects
   // Hold two tokens and two acks

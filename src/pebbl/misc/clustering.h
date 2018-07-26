@@ -32,12 +32,11 @@ public:
   // parameters for parMIP.
   // Meaningful initialization is by reset(...) with real arguments.
 
-  clusterObj() { reset(0,1,1,1,0); };
+  clusterObj() { reset(0,1,1,0); };
 
   void reset(int rank_,
 	     int size_,
 	     int sizeWanted,
-	     int clustersWanted,
 	     int forceSeparateSize);
 
   int rank;

@@ -218,96 +218,90 @@ void clusterObj::reset(int rank_,
 //} // namespace pebbl
 
 
-namespace uMPI {
-  MPI_Comm boundComm;
-  MPI_Comm headComm;
-}
+MPI_Comm boundComm = MPI_COMM_NULL;
+MPI_Comm headComm = MPI_COMM_NULL;
+int worldSize = -1;
+int worldRank = -1;
+int headRank = -1;
+int boundRank = -1;
+int isHub = -1;
+int isWorker = -1;
 
-void setupCommunicators(MPI_Comm comm_,
-		int hubsDontWorkSize,
-		int clusterSize,
-		int boundingGroupSize,
-		int minClusters)
+void setupCommunicators(int hubsDontWorkSize,
+			int clusterSize,
+			int boundingGroupSize,
+			int minClusters)
 {
-  int headRank = -1;
-  int boundRank = -1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
+  MPI_Comm_size(MPI_COMM_WORLD, &worldSize);
   
   clusterObj worldCluster; // use to find pure hubs, then throw away
-  int worldRank, worldSize;
-  MPI_Comm_rank(comm_, &worldRank);
-  MPI_Comm_size(comm_, &worldSize);
   
   bool hubsWork = hubsDontWorkSize > clusterSize;
-  int fullClusterSize = !hubsWork + 
-	  (clusterSize - !hubsWork) * boundingGroupSize;
-  int clustersWanted = worldSize / fullClusterSize;
+  int procsPerGroup = !hubsWork + (clusterSize - !hubsWork) * boundingGroupSize;
+  int clustersWanted = worldSize / procsPerGroup;
   int forceSeparateSize = 1 + (hubsDontWorkSize - 1) * boundingGroupSize;
-  worldCluster.reset(worldRank, worldSize, fullClusterSize, minClusters, 
+  worldCluster.reset(worldRank, worldSize, procsPerGroup, minClusters, 
 		  forceSeparateSize, boundingGroupSize);
  
-  int inBoundingGroup = worldCluster.isFollower();
-  MPI_Comm boundingProcessors; // one for all pure hubs, one for people in bounding groups
-  MPI_Comm_split(comm_, inBoundingGroup, worldRank, &boundingProcessors);
-  int boundingProcessorsRank;
-  MPI_Comm_rank(boundingProcessors, &boundingProcessorsRank);
-  if (inBoundingGroup)
-  {
-    int groupNum = boundingProcessorsRank / boundingGroupSize;
-    MPI_Comm_split(boundingProcessors, groupNum, worldRank, &uMPI::boundComm); 
-  }
-  else
-  {
-    MPI_Comm_free(&boundingProcessors);
-    boundingProcessors = MPI_COMM_NULL;
-    boundingProcessorsRank = -1;
-  }
-  int isWorker = (boundingProcessorsRank % boundingGroupSize == 0); 
-  int notMinion = worldCluster.isLeader() || isWorker;
-  MPI_Comm_split(comm_, notMinion, worldRank, &uMPI::headComm);
-  if (!notMinion)
-  {
-    MPI_Comm_free(&uMPI::headComm);
-    uMPI::headComm = MPI_COMM_NULL;
+  isHub = worldCluster.isLeader();
+  isWorker = worldCluster.isFollower();
+  
+  MPI_Comm dummy; // communicator containing all bounding processors 
+  int dummyRank;
+  
+  MPI_Comm_split(MPI_COMM_WORLD, isWorker, worldRank, &dummy);
+  MPI_Comm_rank(dummy, &dummyRank);
+  
+  if (isWorker)
+    MPI_Comm_split(dummy, dummyRank / boundingGroupSize, worldRank, &boundComm); 
+  MPI_Comm_free(&dummy);
+  
+  int bounder = !isHub && (dummyRank % boundingGroupSize != 0);
+  MPI_Comm_split(MPI_COMM_WORLD, bounder, worldRank, &headComm);
+  
+  if (bounder) {
+    MPI_Comm_free(&headComm);
+    headComm = MPI_COMM_NULL;
   } 
 
-  // might not need isLeader if !isFollower => isLeader
-  bool pureHub = !worldCluster.isFollower() && worldCluster.isLeader();
-  // set variables for printing
-  if (uMPI::headComm != MPI_COMM_NULL)
-  {
-    MPI_Comm_rank(uMPI::headComm, &headRank);
-  }
-  if (uMPI::boundComm != MPI_COMM_NULL && !pureHub)
-  {
-    MPI_Comm_rank(uMPI::boundComm, &boundRank);
-  }
-  
-  MPI_Barrier(MPI_COMM_WORLD);
+}
 
-  // printouts for debugging
-  std::stringstream stream;
+void computeRanks() {
+  if (headComm != MPI_COMM_NULL)
+    MPI_Comm_rank(headComm, &headRank);
+  if (boundComm != MPI_COMM_NULL)
+    MPI_Comm_rank(boundComm, &boundRank);
+}
+
+void printRanks() {
+  stringstream stream;
   stream << worldRank << " " << headRank << " " << boundRank << 
-	  " " << worldCluster.isFollower() << " " << worldCluster.isLeader() << std::endl;
-  std::cout << stream.str();
+  	  " " << isHub << " " << isWorker << endl;
+  for (int i = 0; i < worldSize; i++) {
+    if (i == worldRank)
+      cout << stream.str();
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
 }
 
 int main (int argc, char **argv)
 {
   MPI_Init(&argc, &argv);
-
-  if (argc < 4)
-  {
-    std::cout << "USAGE: hubsDontWorkSize clusterSize boundingGroupSize numClusters" << std::endl;
+  if (argc < 5){
+    cout << "USAGE: hubsDontWorkSize clusterSize boundingGroupSize numClusters" << endl;
     return 1;
   }
   
-  int hubsDontWorkSize = strtol(argv[1], NULL, 10);
+  int hdwSize = strtol(argv[1], NULL, 10);
   int clusterSize = strtol(argv[2], NULL, 10);
-  int boundingGroupSize = strtol(argv[3], NULL, 10);
+  int bgSize = strtol(argv[3], NULL, 10);
   int numClusters = strtol(argv[4], NULL, 10);
   
-  setupCommunicators(MPI_COMM_WORLD, hubsDontWorkSize, clusterSize, boundingGroupSize, numClusters);
-  
+  setupCommunicators(hdwSize, clusterSize, bgSize, numClusters);
+  computeRanks();
+  printRanks();
+
   MPI_Finalize();
   return 0;
 }

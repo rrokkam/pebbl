@@ -31,10 +31,10 @@ void setupCommunicators(int hubsDontWorkSize,
   int lastSeparated = lastClusterWorkers >= hubsDontWorkSize; 
   int inLastCluster = (worldRank / procsPerCluster) == numClusters;
 
-  isHub = (worldRank % procsPerCluster) == 0;  // duplicate of isLeader
+  isHub = (worldRank % procsPerCluster) == 0;
   isWorker = !isHub || hubsWork || (inLastCluster && !lastSeparated);
 
-  MPI_Comm dummy; // contains all bounding processors
+  MPI_Comm dummy; // communicator containing all bounding processors
   int dummyRank;
  
   MPI_Comm_split(MPI_COMM_WORLD, isWorker, worldRank, &dummy);
